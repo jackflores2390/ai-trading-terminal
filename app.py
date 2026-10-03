@@ -282,7 +282,6 @@ def load_local_data():
                 return json.load(f)
         except Exception:
             pass
-    # Clean reset with TRUE win-rate starting tracking
     return {"balance_history": [], "activity_logs": INITIAL_LOGS, "auto_pilot": False, "real_wins": 1, "settled_trades": 1}
 
 def save_local_data(balance_history, activity_logs, auto_pilot_state, real_wins, settled_trades):
@@ -318,7 +317,6 @@ if "balance_history" not in st.session_state:
     else:
         st.session_state.balance_history = [account_data["equity"] - 0.20, account_data["equity"] - 0.05, account_data["equity"]]
 
-# Real Win Rate Math (Only increments on settled closes!)
 if "real_wins" not in st.session_state:
     st.session_state.real_wins = stored.get("real_wins", 1)
 if "settled_trades" not in st.session_state:
@@ -356,7 +354,6 @@ def calculate_market_regime():
 
 regime = calculate_market_regime()
 
-# Multi-Asset Basket
 WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
 
 def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: float = 100.0):
@@ -365,7 +362,6 @@ def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: f
     stake = round(bankroll * (kelly_f * 0.25), 2)
     return max(5.0, min(25.0, stake)) if stake > 0 else 0.0
 
-# CLOSER SELLS THE TRADE (Evaluates Real TP / SL)
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
         return []
@@ -377,11 +373,9 @@ def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
             pnl_usd = float(p.unrealized_pl)
             sym = p.symbol
 
-            # Trigger Take-Profit
             if pnl_pct >= tp_pct:
                 trading_client.close_position(sym)
                 closed_events.append({"action": "TAKE-PROFIT", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": True})
-            # Trigger Stop-Loss
             elif pnl_pct <= -abs(sl_pct):
                 trading_client.close_position(sym)
                 closed_events.append({"action": "STOP-LOSS", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": False})
@@ -407,7 +401,7 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v5.0 • REAL WIN-RATE & MULTI-PAIR</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v5.1 • AUTO SCALPER</span></div>
     </div>
     <div class="live-pill">● QUANT PIPELINE ONLINE</div>
 </div>
@@ -419,7 +413,6 @@ current_equity = account_data["equity"]
 paper_pnl = current_equity - 100000.0
 paper_pnl_pct = (paper_pnl / 100000.0) * 100
 
-# TRUE WIN RATE: Based only on closed trades!
 settled_n = max(1, st.session_state.settled_trades)
 true_win_rate = (st.session_state.real_wins / settled_n) * 100
 
@@ -533,8 +526,7 @@ with c1:
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         st.rerun()
 
-    # REALISTIC FAST SCALP SLIDERS
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.10, 1.00, 0.25, step=0.05, help="Fast scalp target to quickly lock in cash before spread decay")
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.10, 1.00, 0.25, step=0.05, help="Fast scalp target to quickly lock in cash")
     sl_target = st.slider("Closer Stop-Loss (-%)", 0.10, 1.00, 0.20, step=0.05, help="Tight risk cut")
 
     if st.button("🚨 PANIC CLOSE ALL INVENTORY", use_container_width=True, type="primary"):
@@ -546,13 +538,11 @@ with c1:
 
 with c2:
     st.subheader("💼 Multi-Asset Inventory (1 Per Asset Guard)")
-    open_positions_map = {}
     try:
         open_pos = trading_client.get_all_positions() if trading_client else []
         if open_pos:
             pos_list = []
             for p in open_pos:
-                open_positions_map[p.symbol] = float(p.qty)
                 pos_list.append({
                     "Symbol": p.symbol, "Qty": f"{float(p.qty):.4f}",
                     "Entry": f"${float(p.avg_entry_price):,.2f}", "Current": f"${float(p.current_price):,.2f}",
@@ -566,33 +556,28 @@ with c2:
 
     st.caption("🌐 Active Multi-Pair Watchlist: **BTC/USD** • **ETH/USD** • **SOL/USD**")
 
-# 6-STEP CYCLE WITH MULTI-ASSET & ANTI-SPAM GUARD
 def advance_pipeline_step():
     step = st.session_state.active_agent_step
 
-    # 1. Check open positions
     open_syms = set()
     if trading_client:
         try:
             for p in trading_client.get_all_positions():
-                open_syms.add(p.symbol) # e.g. BTCUSD, ETHUSD
+                open_syms.add(p.symbol)
         except Exception:
             pass
 
-    # Pick next asset from basket that does NOT have an open position!
     available_pairs = []
     for pair in WATCHLIST:
         clean = pair.replace("/", "")
         if clean not in open_syms:
             available_pairs.append(pair)
 
-    # If all 3 pairs are already open, pick BTC for closer surveillance
     target_pair = available_pairs[0] if available_pairs else WATCHLIST[0]
     target_clean = target_pair.replace("/", "")
     is_already_open = target_clean in open_syms
 
     if step == 0:
-        # STEP 1: SPOTTER (Scans basket)
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
@@ -601,7 +586,6 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # STEP 2: PRIOR
         curr_regime = calculate_market_regime()
         if curr_regime["state"] == "CHOP":
             st.session_state.activity_logs.insert(0, {
@@ -620,7 +604,6 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 2
 
     elif step == 2:
-        # STEP 3: EDGE
         prob_win = 0.88
         ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
         st.session_state.activity_logs.insert(0, {
@@ -630,7 +613,6 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 3
 
     elif step == 3:
-        # STEP 4: KELLY
         kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
         st.session_state.activity_logs.insert(0, {
             "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
@@ -639,16 +621,13 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 4
 
     elif step == 4:
-        # STEP 5: TAKER (WITH 1-PER-ASSET ANTI-SPAM GUARD!)
         if is_already_open:
-            # REFUSE TO BUY! Guard active.
             st.session_state.activity_logs.insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-hold",
                 "pnl": "—", "p_cls": "pnl-dash",
                 "desc": f"ANTI-SPAM GUARD: Already holding {target_pair.split('/')[0]} · no new order sent", "hi": False
             })
         else:
-            # Place order on unowned asset!
             kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
             order_res = execute_order(target_pair, "BUY", kelly_usd)
             if order_res["success"]:
@@ -663,7 +642,6 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # STEP 6: CLOSER SELLS FOR REAL PROFIT / LOSS!
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
         for c in closed:
             st.session_state.settled_trades += 1
@@ -684,10 +662,9 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "EDGE", "b_cls": "badge-edge",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"guarding active positions (Target TP: +{tp_pct:.2f}%) · cycling back", "hi": False
+                "desc": f"guarding active positions (Target TP: +{tp_target:.2f}%) · cycling back", "hi": False
             })
 
-        # Reset back to Step 0 (SPOTTER) for next cycle!
         st.session_state.active_agent_step = 0
 
     save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
