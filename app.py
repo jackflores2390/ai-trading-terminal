@@ -17,8 +17,11 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
+# DESK BRANDING (Change this to any name you like)
+DESK_NAME = "SYNAPSE // ATS SIGNAL MATRIX"
+
 st.set_page_config(
-    page_title="ATS MATRIX // SIGNAL STACK v4.1",
+    page_title=DESK_NAME,
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -42,7 +45,7 @@ st.markdown("""
 .desk-title {
     font-size: 20px;
     font-weight: 800;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     color: #f0f6fc;
 }
 .live-pill {
@@ -93,10 +96,11 @@ st.markdown("""
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    transition: all 0.25s ease;
 }
 .node-box.active-node {
     border: 1px solid #00f076;
-    box-shadow: 0 0 10px rgba(0, 240, 118, 0.2);
+    box-shadow: 0 0 12px rgba(0, 240, 118, 0.35);
     background: #111a16;
 }
 .node-title {
@@ -290,8 +294,10 @@ if "total_trades" not in st.session_state:
     st.session_state.total_trades = stored.get("total", 43)
 if "resolved_count" not in st.session_state:
     st.session_state.resolved_count = stored.get("resolved", 31)
+
+# Step tracking: starts at 0 (SPOTTER) and loops to 5 (CLOSER)
 if "active_agent_step" not in st.session_state:
-    st.session_state.active_agent_step = 4
+    st.session_state.active_agent_step = 0
 
 AGENTS_METRICS = {
     0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "ORDER FLOW SCANNER", "state": "Anomaly detected (+1.8σ tape speed)", "stat": "TAPE: 41 ticks/s"},
@@ -380,7 +386,7 @@ def execute_order(symbol: str, action: str, notional_usd: float):
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-st.markdown("""<div class="terminal-header"><div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v4.1 • EVERY STEP TELEMETRY</span></div><div class="live-pill">● QUANT PIPELINE ONLINE</div></div>""", unsafe_allow_html=True)
+st.markdown(f"""<div class="terminal-header"><div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v4.2 • PIPELINE LOOP</span></div><div class="live-pill">● QUANT PIPELINE ONLINE</div></div>""", unsafe_allow_html=True)
 
 st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
@@ -402,7 +408,6 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">3.12 <span style="font-size:10px; color:#ffb703;">(-0.42%)</span></div></div>""", unsafe_allow_html=True)
 
-# 6-Node Pipeline Bar (Zero-indentation to prevent code block parsing)
 cur_step = st.session_state.active_agent_step
 node_names = ["1. SPOTTER", "2. PRIOR", "3. EDGE", "4. KELLY", "5. TAKER", "6. CLOSER"]
 node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDING"]
@@ -410,12 +415,11 @@ node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDI
 grid_pieces = ["<div class='pipeline-grid'>"]
 for idx in range(6):
     is_act = "active-node" if idx == cur_step else ""
-    fill_w = "100%" if idx <= cur_step else "30%"
+    fill_w = "100%" if idx <= cur_step else "20%"
     grid_pieces.append(f"<div class='node-box {is_act}'><div class='node-title'>{node_names[idx]}</div><div class='node-val'>{node_tags[idx]}</div><div class='node-progress-track'><div class='node-progress-fill' style='width:{fill_w};'></div></div></div>")
 grid_pieces.append("</div>")
 st.markdown("".join(grid_pieces), unsafe_allow_html=True)
 
-# Main Grid: Left Chart + Inspector vs Right Activity Log
 col_left, col_right = st.columns([1.3, 1.2])
 
 with col_left:
@@ -447,7 +451,6 @@ with col_left:
 with col_right:
     st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span><span style="color:#8b949e;">{st.session_state.resolved_count} RESOLVED</span></div>""", unsafe_allow_html=True)
 
-    # Activity Log Rows (Single-line zero-indent string construction)
     row_pieces = ["<div class='act-container'>"]
     for item in st.session_state.activity_logs[:28]:
         hi_cls = "highlighted" if item.get("hi", False) else ""
@@ -499,79 +502,93 @@ with c2:
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
 
-def run_pipeline(headline, ticker):
-    closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
-    for c in closed:
-        st.session_state.resolved_count += 1
+# Live Step Machine: Moves 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> resets back to 0!
+def advance_pipeline_step(ticker):
+    step = st.session_state.active_agent_step
+
+    if step == 0:
+        # STEP 1: SPOTTER
         st.session_state.activity_logs.insert(0, {
-            "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-            "pnl": f"{c['pnl_usd']:+.2f}", "p_cls": "pnl-pos" if c['pnl_usd'] >= 0 else "pnl-neg",
-            "desc": f"window resolved · {c['action']} triggered at {c['pnl_pct']:+.2f}%", "hi": True
+            "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
+            "pnl": "—", "p_cls": "pnl-dash", "desc": f"tape speed anomaly detected on {ticker.split('/')[0]}", "hi": False
         })
-        save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
+        st.session_state.active_agent_step = 1
 
-    # Step 1: SPOTTER
-    st.session_state.active_agent_step = 0
-    st.session_state.activity_logs.insert(0, {
-        "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
-        "pnl": "—", "p_cls": "pnl-dash", "desc": f"tape speed anomaly detected on {ticker.split('/')[0]}", "hi": False
-    })
+    elif step == 1:
+        # STEP 2: PRIOR
+        curr_regime = calculate_market_regime()
+        if curr_regime["state"] == "CHOP":
+            st.session_state.activity_logs.insert(0, {
+                "dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
+                "pnl": "—", "p_cls": "pnl-dash", "desc": f"vol regime shifted to CHOP ({curr_regime['chop']}%) · widening prior", "hi": False
+            })
+            st.session_state.active_agent_step = 0 # reset back to spotter if chop
+            return
 
-    # Step 2: PRIOR (Regime check)
-    st.session_state.active_agent_step = 1
-    curr_regime = calculate_market_regime()
-    if curr_regime["state"] == "CHOP":
+        prob_win = round(random.uniform(0.76, 0.93), 2)
         st.session_state.activity_logs.insert(0, {
-            "dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
-            "pnl": "—", "p_cls": "pnl-dash", "desc": f"vol regime shifted to CHOP ({curr_regime['chop']}%) · widening prior", "hi": False
+            "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
+            "pnl": f"+${random.uniform(20, 60):.2f}", "p_cls": "pnl-pos",
+            "desc": f"prior updated on 1,204 past windows · P={prob_win:.2f}", "hi": False
         })
-        save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
-        return
+        st.session_state.active_agent_step = 2
 
-    prob_win = round(random.uniform(0.76, 0.93), 2)
-    st.session_state.activity_logs.insert(0, {
-        "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
-        "pnl": f"+${random.uniform(20, 60):.2f}", "p_cls": "pnl-pos",
-        "desc": f"prior updated on 1,204 past windows · P={prob_win:.2f}", "hi": False
-    })
-
-    # Step 3: EDGE
-    st.session_state.active_agent_step = 2
-    ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
-    st.session_state.activity_logs.insert(0, {
-        "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
-        "pnl": "—", "p_cls": "pnl-dash", "desc": f"cross-checked three feeds · EV confirmed +{ev*100:.0f}%", "hi": False
-    })
-
-    # Step 4: KELLY
-    st.session_state.active_agent_step = 3
-    kelly_usd = calculate_kelly_size(prob_win=prob_win, bankroll=100.0)
-    st.session_state.activity_logs.insert(0, {
-        "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
-        "pnl": "—", "p_cls": "pnl-dash", "desc": f"stake sized against settled tickets · clip ${kelly_usd:.2f}", "hi": False
-    })
-
-    # Step 5: TAKER
-    st.session_state.active_agent_step = 4
-    order_res = execute_order(ticker, "BUY", kelly_usd)
-
-    if order_res["success"]:
-        st.session_state.wins += 1
-        st.session_state.total_trades += 1
+    elif step == 2:
+        # STEP 3: EDGE
+        prob_win = 0.88
+        ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
         st.session_state.activity_logs.insert(0, {
-            "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
-            "pnl": f"-${random.uniform(8, 25):.2f}", "p_cls": "pnl-neg",
-            "desc": f"took {ticker.split('/')[0]} market fill #{order_res['id']} at 12ms clip", "hi": False
+            "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
+            "pnl": "—", "p_cls": "pnl-dash", "desc": f"cross-checked three feeds · EV confirmed +{ev*100:.0f}%", "hi": False
         })
+        st.session_state.active_agent_step = 3
 
-        # Step 6: CLOSER
+    elif step == 3:
+        # STEP 4: KELLY
+        kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
+        st.session_state.activity_logs.insert(0, {
+            "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
+            "pnl": "—", "p_cls": "pnl-dash", "desc": f"stake sized against settled tickets · clip ${kelly_usd:.2f}", "hi": False
+        })
+        st.session_state.active_agent_step = 4
+
+    elif step == 4:
+        # STEP 5: TAKER EXECUTION
+        kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
+        order_res = execute_order(ticker, "BUY", kelly_usd)
+        if order_res["success"]:
+            st.session_state.wins += 1
+            st.session_state.total_trades += 1
+            st.session_state.activity_logs.insert(0, {
+                "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
+                "pnl": f"-${random.uniform(8, 25):.2f}", "p_cls": "pnl-neg",
+                "desc": f"took {ticker.split('/')[0]} market fill #{order_res['id']} at 12ms clip", "hi": False
+            })
+            fresh = fetch_account()
+            st.session_state.balance_history.append(fresh["equity"])
         st.session_state.active_agent_step = 5
-        fresh = fetch_account()
-        st.session_state.balance_history.append(fresh["equity"])
-        save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
-        st.rerun()
+
+    elif step == 5:
+        # STEP 6: CLOSER GUARDS AND LOOPS BACK TO 0!
+        closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
+        for c in closed:
+            st.session_state.resolved_count += 1
+            st.session_state.activity_logs.insert(0, {
+                "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
+                "pnl": f"{c['pnl_usd']:+.2f}", "p_cls": "pnl-pos" if c['pnl_usd'] >= 0 else "pnl-neg",
+                "desc": f"window resolved · {c['action']} triggered at {c['pnl_pct']:+.2f}%", "hi": True
+            })
+        st.session_state.activity_logs.insert(0, {
+            "dot": "#ff7043", "agent": "CLOSER", "badge": "EDGE", "b_cls": "badge-edge",
+            "pnl": f"+${random.uniform(10, 45):.2f}", "p_cls": "pnl-pos",
+            "desc": "no gap this window · cycling back to SPOTTER", "hi": False
+        })
+        # Reset back to Step 0 (SPOTTER) to start next cycle!
+        st.session_state.active_agent_step = 0
+
+    save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
 
 if auto_pilot:
-    time.sleep(6)
-    fresh_h = fetch_live_news(selected_ticker)
-    run_pipeline(random.choice(fresh_h), selected_ticker)
+    time.sleep(2.0)
+    advance_pipeline_step(selected_ticker)
+    st.rerun()
