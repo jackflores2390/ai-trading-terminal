@@ -17,9 +17,8 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
-# 1. Page Configuration & Dan1ro0 Tactical Dark Theme
 st.set_page_config(
-    page_title="ATS MATRIX // SIGNAL STACK v3.6",
+    page_title="ATS MATRIX // SIGNAL STACK v3.8",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -59,8 +58,6 @@ st.markdown("""
         font-weight: 800;
         letter-spacing: 1.5px;
     }
-
-    /* Regime Radar Bar */
     .regime-container {
         display: flex;
         gap: 12px;
@@ -82,20 +79,21 @@ st.markdown("""
     .regime-trend { background: #112a1c; color: #00f076; border: 1px solid #00f076; }
     .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
     .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
-
-    /* Signal Stack Nodes */
     .pipeline-grid {
         display: flex;
         gap: 8px;
-        margin-top: 10px;
+        margin: 10px 0;
     }
     .node-box {
         flex: 1;
         background: #0d1117;
         border: 1px solid #1f2633;
         border-radius: 6px;
-        padding: 8px 6px;
+        padding: 10px 8px 8px 8px;
         text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .node-box.active-node {
         border: 1px solid #00f076;
@@ -112,27 +110,27 @@ st.markdown("""
         font-size: 12px;
         font-weight: 700;
         margin-top: 4px;
+        margin-bottom: 8px;
         color: #f0f6fc;
     }
-
-    /* Pipeline Progress Bar */
-    .progress-track {
-        background: #0d1117;
-        border: 1px solid #1f2633;
-        border-radius: 4px;
-        height: 6px;
+    .node-progress-track {
+        background: #07090d;
+        border: 1px solid #1c2331;
+        border-radius: 2px;
+        height: 4px;
         width: 100%;
         overflow: hidden;
-        margin-top: 8px;
     }
-    .progress-fill {
-        background: linear-gradient(90deg, #00b4d8, #00f076);
+    .node-progress-fill {
+        background: #00f076;
         height: 100%;
-        box-shadow: 0 0 8px rgba(0, 240, 118, 0.6);
-        transition: width 0.4s ease;
+        box-shadow: 0 0 6px rgba(0, 240, 118, 0.8);
+        transition: width 0.3s ease;
     }
-
-    /* Metric Cards */
+    .node-progress-fill.amber {
+        background: #ffb703;
+        box-shadow: 0 0 6px rgba(255, 183, 3, 0.8);
+    }
     .stat-card {
         background: #0d1117;
         border: 1px solid #1f2633;
@@ -154,8 +152,6 @@ st.markdown("""
     .c-green { color: #00f076; }
     .c-white { color: #f0f6fc; }
     .c-cyan { color: #00e5ff; }
-
-    /* Spectrogram Banner */
     .spectrogram-bar {
         background: #0d1117;
         border: 1px solid #1f2633;
@@ -168,8 +164,6 @@ st.markdown("""
         font-size: 11px;
         color: #00f076;
     }
-
-    /* Telemetry Feed */
     .feed-box {
         background: #0d1117;
         border: 1px solid #1f2633;
@@ -194,7 +188,6 @@ st.markdown("""
 
 load_dotenv()
 
-# Cloud Secrets & Env Compatibility
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 ALPACA_KEY = st.secrets.get("ALPACA_API_KEY", os.getenv("ALPACA_API_KEY"))
 ALPACA_SECRET = st.secrets.get("ALPACA_SECRET_KEY", os.getenv("ALPACA_SECRET_KEY"))
@@ -289,10 +282,16 @@ if "pipeline_state" not in st.session_state:
         "closer": "GUARDING BTC"
     }
 
-if "cycle_progress" not in st.session_state:
-    st.session_state.cycle_progress = 100
+if "node_progress" not in st.session_state:
+    st.session_state.node_progress = {
+        "spotter": 100,
+        "prior": 100,
+        "edge": 100,
+        "kelly": 100,
+        "taker": 100,
+        "closer": 100
+    }
 
-# 2. Market Regime Radar
 def calculate_market_regime():
     r_val = random.random()
     if r_val > 0.40:
@@ -304,7 +303,6 @@ def calculate_market_regime():
 
 regime = calculate_market_regime()
 
-# 3. Live News Ingestion
 def fetch_live_news(ticker: str):
     headlines = []
     clean_sym = ticker.split("/")[0]
@@ -334,14 +332,12 @@ def fetch_live_news(ticker: str):
         headlines = [f"Institutional flow monitors continuous accumulation on {clean_sym} venues."]
     return headlines
 
-# 4. Mathematical Kelly Formula
 def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: float = 100.0):
     p, q, b = prob_win, 1.0 - prob_win, payoff_ratio
     kelly_f = max(0.0, (b * p - q) / b)
     stake = round(bankroll * (kelly_f * 0.25), 2)
     return max(5.0, min(35.0, stake)) if stake > 0 else 0.0
 
-# 5. TP / SL Execution
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
         return []
@@ -362,7 +358,6 @@ def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
         pass
     return closed_events
 
-# 6. Execute Order on Alpaca
 def execute_order(symbol: str, action: str, notional_usd: float):
     if not trading_client:
         return {"success": False, "msg": "Broker credentials missing"}
@@ -375,15 +370,13 @@ def execute_order(symbol: str, action: str, notional_usd: float):
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-# Top Desk Header
 st.markdown("""
     <div class="terminal-header">
-        <div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v3.6 • AUTONOMOUS</span></div>
+        <div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v3.8 • AUTONOMOUS</span></div>
         <div class="live-pill">● QUANT PIPELINE ONLINE</div>
     </div>
 """, unsafe_allow_html=True)
 
-# Regime Radar Bar
 st.markdown(f"""
     <div class="regime-container">
         <div><span style="color:#8b949e; font-size:11px; font-weight:700;">REGIME RADAR:</span> &nbsp;
@@ -398,7 +391,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ATS Matrix Quant Metrics
 current_equity = account_data["equity"]
 paper_pnl = current_equity - 100000.0
 paper_pnl_pct = (paper_pnl / 100000.0) * 100
@@ -420,47 +412,56 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">{sharpe_ratio:.2f} <span style="font-size:11px; color:#ffb703;">({max_drawdown}%)</span></div></div>""", unsafe_allow_html=True)
 
-# The 6-Node Signal Pipeline
 ps = st.session_state.pipeline_state
+np_prog = st.session_state.node_progress
+
 st.markdown(f"""
     <div class="pipeline-grid">
         <div class="node-box active-node">
             <div class="node-title">1. SPOTTER</div>
             <div class="node-val">{ps['spotter']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill" style="width: {np_prog['spotter']}%;"></div>
+            </div>
         </div>
         <div class="node-box active-node">
             <div class="node-title">2. PRIOR</div>
             <div class="node-val">{ps['prior']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill {'amber' if 'ABORT' in ps['prior'] else ''}" style="width: {np_prog['prior']}%;"></div>
+            </div>
         </div>
         <div class="node-box active-node">
             <div class="node-title">3. EDGE</div>
             <div class="node-val">{ps['edge']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill {'amber' if 'CHOP' in ps['edge'] else ''}" style="width: {np_prog['edge']}%;"></div>
+            </div>
         </div>
         <div class="node-box active-node">
             <div class="node-title">4. KELLY</div>
             <div class="node-val">{ps['kelly']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill" style="width: {np_prog['kelly']}%;"></div>
+            </div>
         </div>
         <div class="node-box active-node">
             <div class="node-title">5. TAKER</div>
             <div class="node-val">{ps['taker']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill" style="width: {np_prog['taker']}%;"></div>
+            </div>
         </div>
-        <div class="node-box">
+        <div class="node-box active-node">
             <div class="node-title">6. CLOSER</div>
             <div class="node-val">{ps['closer']}</div>
+            <div class="node-progress-track">
+                <div class="node-progress-fill" style="width: {np_prog['closer']}%;"></div>
+            </div>
         </div>
-    </div>
-    
-    <!-- Dynamic Progress Bar at bottom of 6-Node Pipeline -->
-    <div class="progress-track">
-        <div class="progress-fill" style="width: {st.session_state.cycle_progress}%;"></div>
-    </div>
-    <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-top:3px; margin-bottom:8px;">
-        <span>PIPELINE TELEMETRY: <b>SYNCED [1 → 6]</b></span>
-        <span>SWARM CYCLE PROGRESS: <b style="color:#00f076;">{st.session_state.cycle_progress}%</b></span>
     </div>
 """, unsafe_allow_html=True)
 
-# Spectrogram / Signal Frequency Visualizer
 hz = random.randint(138, 156)
 bars = "".join(random.choice(["|", "‖", "l", "!", "I"]) for _ in range(48))
 st.markdown(f"""
@@ -470,7 +471,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# Split View: Chart & Activity Feed
 col_left, col_right = st.columns([1.4, 1.0])
 
 with col_left:
@@ -520,7 +520,6 @@ with col_right:
 
 st.divider()
 
-# Controls: Clean Hands-Free Dashboard
 c1, c2 = st.columns([1, 2])
 
 with c1:
@@ -542,7 +541,7 @@ with c1:
             st.rerun()
 
 with c2:
-    st.subheader("💼 Active Inventory & Swarm Ingestion")
+    st.subheader("💼 Active Inventory & Market Venue")
     try:
         open_pos = trading_client.get_all_positions() if trading_client else []
         if open_pos:
@@ -554,15 +553,11 @@ with c2:
         st.caption(f"Inventory query: {e}")
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
-    live_news = fetch_live_news(selected_ticker)
-    
-    # Real-time Autonomous Stream Monitor (No manual buttons)
-    st.caption("📡 Autonomous News Wire Stream Ingested:")
-    st.info(f"**Latest Tape:** {live_news[0] if live_news else 'Scanning liquidity venues...'}")
 
-# The Full 6-Node Autonomous Pipeline Engine
 def run_pipeline(headline, ticker):
-    st.session_state.cycle_progress = 15
+    st.session_state.node_progress["spotter"] = 100
+    st.session_state.pipeline_state["spotter"] = "TRIGGERED"
+
     closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
     for c in closed:
         st.session_state.trade_logs.insert(0, {
@@ -578,42 +573,38 @@ def run_pipeline(headline, ticker):
         save_local_data(st.session_state.balance_history, st.session_state.trade_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades)
         st.toast(f"CLOSER: {c['action']} on {c['sym']} ({c['pnl_pct']:+.2f}%)")
 
-    # Step 1: SPOTTER
-    st.session_state.cycle_progress = 35
-    st.session_state.pipeline_state["spotter"] = "TRIGGERED"
-
-    # Step 2: REGIME CHECK (Gatekeeper)
     curr_regime = calculate_market_regime()
     if curr_regime["state"] == "CHOP":
         st.session_state.pipeline_state["prior"] = "ABORT"
+        st.session_state.node_progress["prior"] = 40
         st.session_state.pipeline_state["edge"] = "CHOP REGIME"
-        st.session_state.cycle_progress = 100
+        st.session_state.node_progress["edge"] = 0
+        st.session_state.node_progress["kelly"] = 0
+        st.session_state.node_progress["taker"] = 0
         st.warning(f"REGIME RADAR: Market in CHOP state ({curr_regime['chop']}%). Pipeline rejected trade to preserve capital.")
         return
 
-    # Step 3: PRIOR (Bayesian Probability)
-    st.session_state.cycle_progress = 55
     prob_win = round(random.uniform(0.74, 0.92), 2)
     st.session_state.pipeline_state["prior"] = f"P={prob_win:.2f}"
+    st.session_state.node_progress["prior"] = 100
 
-    # Step 4: EDGE (Expected Value Gap)
-    st.session_state.cycle_progress = 75
     ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
     st.session_state.pipeline_state["edge"] = f"EV: +{ev*100:.0f}%"
+    st.session_state.node_progress["edge"] = 100
 
-    # Step 5: KELLY (Bet Sizing)
-    st.session_state.cycle_progress = 90
     kelly_usd = calculate_kelly_size(prob_win=prob_win, bankroll=100.0)
     st.session_state.pipeline_state["kelly"] = f"${kelly_usd:.2f}"
+    st.session_state.node_progress["kelly"] = 100
 
-    # Step 6: TAKER (Order Execution on Alpaca)
     st.session_state.pipeline_state["taker"] = "DISPATCHING"
+    st.session_state.node_progress["taker"] = 60
     order_res = execute_order(ticker, "BUY", kelly_usd)
 
-    st.session_state.cycle_progress = 100
     if order_res["success"]:
         st.session_state.pipeline_state["taker"] = f"FILLED #{order_res['id']}"
+        st.session_state.node_progress["taker"] = 100
         st.session_state.pipeline_state["closer"] = f"GUARDING {ticker}"
+        st.session_state.node_progress["closer"] = 100
 
         st.session_state.wins += 1
         st.session_state.total_trades += 1
@@ -635,9 +626,9 @@ def run_pipeline(headline, ticker):
         st.rerun()
     else:
         st.session_state.pipeline_state["taker"] = "REJECTED"
+        st.session_state.node_progress["taker"] = 0
         st.error(f"TAKER FAILED: {order_res['msg']}")
 
-# Fully Autonomous Loop (No button clicks needed)
 if auto_pilot:
     time.sleep(7)
     fresh_h = fetch_live_news(selected_ticker)
