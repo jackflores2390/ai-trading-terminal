@@ -17,12 +17,11 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
-# DESK BRANDING (Change this to any name you like)
-DESK_NAME = "SYNAPSE // ATS SIGNAL MATRIX"
+DESK_NAME = "SYNAPSE // THE LENS MATRIX"
 
 st.set_page_config(
     page_title=DESK_NAME,
-    page_icon="⚡",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -41,6 +40,11 @@ st.markdown("""
     padding-bottom: 8px;
     border-bottom: 1px solid #161b22;
     margin-bottom: 10px;
+}
+.title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 .desk-title {
     font-size: 20px;
@@ -80,6 +84,7 @@ st.markdown("""
 .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
 .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
 
+/* 6-Node Pipeline Bar */
 .pipeline-grid {
     display: flex;
     gap: 8px;
@@ -91,7 +96,7 @@ st.markdown("""
     background: #0d1117;
     border: 1px solid #1f2633;
     border-radius: 6px;
-    padding: 8px 6px;
+    padding: 10px 8px 8px 8px;
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -100,7 +105,7 @@ st.markdown("""
 }
 .node-box.active-node {
     border: 1px solid #00f076;
-    box-shadow: 0 0 12px rgba(0, 240, 118, 0.35);
+    box-shadow: 0 0 14px rgba(0, 240, 118, 0.35);
     background: #111a16;
 }
 .node-title {
@@ -116,18 +121,27 @@ st.markdown("""
     margin-bottom: 6px;
     color: #f0f6fc;
 }
-.node-progress-track {
-    background: #07090d;
-    border: 1px solid #1c2331;
-    border-radius: 2px;
-    height: 3px;
+
+/* High-Tech Segmented LED Progress Meter */
+.seg-meter {
+    display: flex;
+    gap: 3px;
     width: 100%;
-    overflow: hidden;
+    margin-top: 4px;
 }
-.node-progress-fill {
+.seg-tick {
+    flex: 1;
+    height: 4px;
+    background: #161b24;
+    border-radius: 1px;
+}
+.seg-tick.lit {
     background: #00f076;
-    height: 100%;
-    box-shadow: 0 0 6px rgba(0, 240, 118, 0.8);
+    box-shadow: 0 0 6px rgba(0, 240, 118, 0.9);
+}
+.seg-tick.cyan {
+    background: #00e5ff;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
 }
 
 .stat-card {
@@ -205,13 +219,28 @@ st.markdown("""
 .pnl-dash { color: #64748b; font-weight: 600; text-align: right; }
 .act-desc { color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* The Lens Inspector Card */
 .inspector-card {
     background: #0d1117;
     border: 1px solid #00f076;
-    box-shadow: 0 0 12px rgba(0, 240, 118, 0.15);
+    box-shadow: 0 0 14px rgba(0, 240, 118, 0.18);
     border-radius: 6px;
     padding: 10px 14px;
     margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.lens-orb {
+    width: 32px;
+    height: 32px;
+    background: radial-gradient(circle, #00f076 20%, #0d1117 70%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 12px rgba(0, 240, 118, 0.6);
+    flex-shrink: 0;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -295,7 +324,6 @@ if "total_trades" not in st.session_state:
 if "resolved_count" not in st.session_state:
     st.session_state.resolved_count = stored.get("resolved", 31)
 
-# Step tracking: starts at 0 (SPOTTER) and loops to 5 (CLOSER)
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
 
@@ -386,7 +414,18 @@ def execute_order(symbol: str, action: str, notional_usd: float):
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-st.markdown(f"""<div class="terminal-header"><div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v4.2 • PIPELINE LOOP</span></div><div class="live-pill">● QUANT PIPELINE ONLINE</div></div>""", unsafe_allow_html=True)
+# Header with the Reference Cyber Bot Icon
+BOT_ICON_SVG = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="15" rx="5" fill="#111620" stroke="#00f076" stroke-width="1.8"/><circle cx="8" cy="12" r="2" fill="#00f076"/><circle cx="16" cy="12" r="2" fill="#00f076"/><path d="M12 2V5" stroke="#00f076" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="1.5" r="1.5" fill="#00f076"/><path d="M9 16C10.5 17 13.5 17 15 16" stroke="#00f076" stroke-width="1.2" stroke-linecap="round"/></svg>"""
+
+st.markdown(f"""
+<div class="terminal-header">
+    <div class="title-wrapper">
+        {BOT_ICON_SVG}
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v4.5 • THE LENS PIPELINE</span></div>
+    </div>
+    <div class="live-pill">● QUANT PIPELINE ONLINE</div>
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
@@ -408,6 +447,7 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">3.12 <span style="font-size:10px; color:#ffb703;">(-0.42%)</span></div></div>""", unsafe_allow_html=True)
 
+# 6-Node Pipeline Bar with Upgraded Segmented LED Progress Meters
 cur_step = st.session_state.active_agent_step
 node_names = ["1. SPOTTER", "2. PRIOR", "3. EDGE", "4. KELLY", "5. TAKER", "6. CLOSER"]
 node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDING"]
@@ -415,8 +455,19 @@ node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDI
 grid_pieces = ["<div class='pipeline-grid'>"]
 for idx in range(6):
     is_act = "active-node" if idx == cur_step else ""
-    fill_w = "100%" if idx <= cur_step else "20%"
-    grid_pieces.append(f"<div class='node-box {is_act}'><div class='node-title'>{node_names[idx]}</div><div class='node-val'>{node_tags[idx]}</div><div class='node-progress-track'><div class='node-progress-fill' style='width:{fill_w};'></div></div></div>")
+    
+    # 5-Segment LED Hardware Meter
+    seg_html = "<div class='seg-meter'>"
+    num_lit = 5 if idx < cur_step else (3 if idx == cur_step else 0)
+    for s in range(5):
+        lit_cls = "lit" if s < num_lit else ""
+        if idx == cur_step and s < num_lit:
+            lit_cls = "cyan"
+        seg_html += f"<div class='seg-tick {lit_cls}'></div>"
+    seg_html += "</div>"
+
+    grid_pieces.append(f"<div class='node-box {is_act}'><div class='node-title'>{node_names[idx]}</div><div class='node-val'>{node_tags[idx]}</div>{seg_html}</div>")
+
 grid_pieces.append("</div>")
 st.markdown("".join(grid_pieces), unsafe_allow_html=True)
 
@@ -445,8 +496,24 @@ with col_left:
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
+    # The Lens Inspector Card with glowing Orb Core
     cur_ag = AGENTS_METRICS[cur_step]
-    st.markdown(f"""<div class="inspector-card"><div style="display:flex; justify-content:space-between; align-items:center;"><span>ACTIVE STAGE: <b class="{cur_ag['tag']}">{cur_ag['name']}</b> &nbsp; <span style="font-size:10px; color:#8b949e;">[{cur_ag['role']}]</span></span><span style="font-size:11px; color:#00f076; font-weight:800;">{cur_ag['stat']}</span></div><div style="font-size:11px; color:#c9d1d9; margin-top:5px;">▸ <i>{cur_ag['state']}</i></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="inspector-card">
+        <div class="lens-orb">
+            <span style="font-size:12px; font-weight:900; color:#07090d;">//</span>
+        </div>
+        <div style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>STAGE {cur_step+1}/6: <b class="{cur_ag['tag']}">{cur_ag['name']}</b> &nbsp; <span style="font-size:10px; color:#8b949e;">[{cur_ag['role']}]</span></span>
+                <span style="font-size:11px; color:#00f076; font-weight:800;">{cur_ag['stat']}</span>
+            </div>
+            <div style="font-size:11px; color:#c9d1d9; margin-top:3px;">
+                ▸ <i>{cur_ag['state']}</i>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col_right:
     st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span><span style="color:#8b949e;">{st.session_state.resolved_count} RESOLVED</span></div>""", unsafe_allow_html=True)
@@ -473,7 +540,7 @@ c1, c2 = st.columns([1, 2])
 with c1:
     st.subheader("⚙️ Desk Controls")
     saved_ap = stored.get("auto_pilot", False)
-    auto_pilot = st.toggle("⚡ ACTIVATE ATS SIGNAL STACK", value=saved_ap)
+    auto_pilot = st.toggle("⚡ ACTIVATE THE LENS SWARM", value=saved_ap)
     if auto_pilot != saved_ap:
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
         st.rerun()
@@ -489,7 +556,7 @@ with c1:
             st.rerun()
 
 with c2:
-    st.subheader("💼 Active Inventory & Market Feed")
+    st.subheader("💼 Active Inventory & Market Venue")
     try:
         open_pos = trading_client.get_all_positions() if trading_client else []
         if open_pos:
@@ -502,7 +569,7 @@ with c2:
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
 
-# Live Step Machine: Moves 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> resets back to 0!
+# 6-Step Autonomous Loop: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> resets back to 0!
 def advance_pipeline_step(ticker):
     step = st.session_state.active_agent_step
 
@@ -522,7 +589,7 @@ def advance_pipeline_step(ticker):
                 "dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
                 "pnl": "—", "p_cls": "pnl-dash", "desc": f"vol regime shifted to CHOP ({curr_regime['chop']}%) · widening prior", "hi": False
             })
-            st.session_state.active_agent_step = 0 # reset back to spotter if chop
+            st.session_state.active_agent_step = 0
             return
 
         prob_win = round(random.uniform(0.76, 0.93), 2)
@@ -553,7 +620,7 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 4
 
     elif step == 4:
-        # STEP 5: TAKER EXECUTION
+        # STEP 5: TAKER
         kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
         order_res = execute_order(ticker, "BUY", kelly_usd)
         if order_res["success"]:
@@ -569,7 +636,7 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # STEP 6: CLOSER GUARDS AND LOOPS BACK TO 0!
+        # STEP 6: CLOSER & RESET TO 0!
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
         for c in closed:
             st.session_state.resolved_count += 1
@@ -583,12 +650,11 @@ def advance_pipeline_step(ticker):
             "pnl": f"+${random.uniform(10, 45):.2f}", "p_cls": "pnl-pos",
             "desc": "no gap this window · cycling back to SPOTTER", "hi": False
         })
-        # Reset back to Step 0 (SPOTTER) to start next cycle!
         st.session_state.active_agent_step = 0
 
     save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades, st.session_state.resolved_count)
 
 if auto_pilot:
-    time.sleep(2.0)
+    time.sleep(1.8)
     advance_pipeline_step(selected_ticker)
     st.rerun()
