@@ -1,0 +1,7 @@
+streamlit
+alpaca-py
+google-genai
+plotly
+pandas
+numpy
+python-dotenv
