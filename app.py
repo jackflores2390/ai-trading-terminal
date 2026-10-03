@@ -84,64 +84,70 @@ st.markdown("""
 .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
 .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
 
-/* 6-Node Pipeline Bar */
+/* Reference Dan1ro0 6-Node Grid */
 .pipeline-grid {
     display: flex;
     gap: 8px;
     margin: 8px 0 12px 0;
     width: 100%;
 }
-.node-box {
+.ats-card {
     flex: 1;
     background: #0d1117;
     border: 1px solid #1f2633;
     border-radius: 6px;
-    padding: 10px 8px 8px 8px;
-    text-align: center;
+    padding: 8px 10px;
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
     transition: all 0.25s ease;
 }
-.node-box.active-node {
-    border: 1px solid #00f076;
-    box-shadow: 0 0 14px rgba(0, 240, 118, 0.35);
-    background: #111a16;
+.ats-icon-wrap {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
-.node-title {
-    font-size: 10px;
+.ats-icon-eyes {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: -1px;
+}
+.ats-mid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.ats-sub {
+    font-size: 8px;
     font-weight: 800;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     color: #8b949e;
+    text-transform: uppercase;
 }
-.node-val {
-    font-size: 11px;
-    font-weight: 700;
-    margin-top: 3px;
-    margin-bottom: 6px;
+.ats-name {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
     color: #f0f6fc;
 }
-
-/* High-Tech Segmented LED Progress Meter */
-.seg-meter {
+.ats-right {
     display: flex;
-    gap: 3px;
-    width: 100%;
-    margin-top: 4px;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
 }
-.seg-tick {
-    flex: 1;
-    height: 4px;
-    background: #161b24;
-    border-radius: 1px;
-}
-.seg-tick.lit {
-    background: #00f076;
-    box-shadow: 0 0 6px rgba(0, 240, 118, 0.9);
-}
-.seg-tick.cyan {
-    background: #00e5ff;
-    box-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
+.ats-substatus {
+    color: #8b949e;
+    margin-top: 2px;
 }
 
 .stat-card {
@@ -219,7 +225,6 @@ st.markdown("""
 .pnl-dash { color: #64748b; font-weight: 600; text-align: right; }
 .act-desc { color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* The Lens Inspector Card */
 .inspector-card {
     background: #0d1117;
     border: 1px solid #00f076;
@@ -323,9 +328,18 @@ if "total_trades" not in st.session_state:
     st.session_state.total_trades = stored.get("total", 43)
 if "resolved_count" not in st.session_state:
     st.session_state.resolved_count = stored.get("resolved", 31)
-
 if "active_agent_step" not in st.session_state:
-    st.session_state.active_agent_step = 0
+    st.session_state.active_agent_step = 3 # Kelly highlighted like in image
+
+# Detailed Reference Node Spec
+PIPELINE_NODES = [
+    {"num": "01", "role": "TAPE", "name": "SPOTTER", "color": "#00e676"},
+    {"num": "02", "role": "PRICING", "name": "PRIOR", "color": "#f59e0b"},
+    {"num": "03", "role": "EDGE", "name": "EDGE", "color": "#e040fb"},
+    {"num": "04", "role": "SIZING", "name": "KELLY", "color": "#a855f7"},
+    {"num": "05", "role": "EXECUTION", "name": "TAKER", "color": "#3b82f6"},
+    {"num": "06", "role": "SETTLEMENT", "name": "CLOSER", "color": "#ff7043"},
+]
 
 AGENTS_METRICS = {
     0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "ORDER FLOW SCANNER", "state": "Anomaly detected (+1.8σ tape speed)", "stat": "TAPE: 41 ticks/s"},
@@ -414,14 +428,13 @@ def execute_order(symbol: str, action: str, notional_usd: float):
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-# Header with the Reference Cyber Bot Icon
 BOT_ICON_SVG = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="15" rx="5" fill="#111620" stroke="#00f076" stroke-width="1.8"/><circle cx="8" cy="12" r="2" fill="#00f076"/><circle cx="16" cy="12" r="2" fill="#00f076"/><path d="M12 2V5" stroke="#00f076" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="1.5" r="1.5" fill="#00f076"/><path d="M9 16C10.5 17 13.5 17 15 16" stroke="#00f076" stroke-width="1.2" stroke-linecap="round"/></svg>"""
 
 st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v4.5 • THE LENS PIPELINE</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v4.8 • THE LENS PIPELINE</span></div>
     </div>
     <div class="live-pill">● QUANT PIPELINE ONLINE</div>
 </div>
@@ -447,26 +460,32 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">3.12 <span style="font-size:10px; color:#ffb703;">(-0.42%)</span></div></div>""", unsafe_allow_html=True)
 
-# 6-Node Pipeline Bar with Upgraded Segmented LED Progress Meters
+# EXACT 6-NODE PIPELINE MATCHING YOUR REFERENCE IMAGE
 cur_step = st.session_state.active_agent_step
-node_names = ["1. SPOTTER", "2. PRIOR", "3. EDGE", "4. KELLY", "5. TAKER", "6. CLOSER"]
-node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDING"]
-
 grid_pieces = ["<div class='pipeline-grid'>"]
-for idx in range(6):
-    is_act = "active-node" if idx == cur_step else ""
-    
-    # 5-Segment LED Hardware Meter
-    seg_html = "<div class='seg-meter'>"
-    num_lit = 5 if idx < cur_step else (3 if idx == cur_step else 0)
-    for s in range(5):
-        lit_cls = "lit" if s < num_lit else ""
-        if idx == cur_step and s < num_lit:
-            lit_cls = "cyan"
-        seg_html += f"<div class='seg-tick {lit_cls}'></div>"
-    seg_html += "</div>"
 
-    grid_pieces.append(f"<div class='node-box {is_act}'><div class='node-title'>{node_names[idx]}</div><div class='node-val'>{node_tags[idx]}</div>{seg_html}</div>")
+for idx, node in enumerate(PIPELINE_NODES):
+    c = node["color"]
+    is_active = (idx == cur_step)
+
+    if is_active:
+        card_style = f"border: 1.5px solid {c}; box-shadow: 0 0 14px {c}44; border-bottom: 3px solid {c};"
+        status_top = f"<span style='color:{c};'>● RUN</span>"
+        status_bot = "<span style='color:#f0f6fc;'>0.0S</span>"
+    elif idx < cur_step:
+        card_style = f"border-bottom: 2px solid {c};"
+        status_top = "● IDLE"
+        status_bot = "<span style='color:#00e676;'>DONE</span>"
+    elif idx == (cur_step + 1) % 6:
+        card_style = f"border-bottom: 2px solid {c};"
+        status_top = "<span style='color:#3b82f6;'>■ NEXT</span>"
+        status_bot = "ON DECK"
+    else:
+        card_style = f"border-bottom: 2px solid {c};"
+        status_top = "■ IDLE"
+        status_bot = "QUEUED"
+
+    grid_pieces.append(f"<div class='ats-card' style='{card_style}'><div class='ats-icon-wrap' style='background:{c};'><span class='ats-icon-eyes'>//</span></div><div class='ats-mid'><div class='ats-sub'>{node['num']} · {node['role']}</div><div class='ats-name'>{node['name']}</div></div><div class='ats-right'><div class='ats-status'>{status_top}</div><div class='ats-substatus'>{status_bot}</div></div></div>")
 
 grid_pieces.append("</div>")
 st.markdown("".join(grid_pieces), unsafe_allow_html=True)
@@ -496,7 +515,6 @@ with col_left:
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-    # The Lens Inspector Card with glowing Orb Core
     cur_ag = AGENTS_METRICS[cur_step]
     st.markdown(f"""
     <div class="inspector-card">
@@ -569,12 +587,10 @@ with c2:
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
 
-# 6-Step Autonomous Loop: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> resets back to 0!
 def advance_pipeline_step(ticker):
     step = st.session_state.active_agent_step
 
     if step == 0:
-        # STEP 1: SPOTTER
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash", "desc": f"tape speed anomaly detected on {ticker.split('/')[0]}", "hi": False
@@ -582,7 +598,6 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # STEP 2: PRIOR
         curr_regime = calculate_market_regime()
         if curr_regime["state"] == "CHOP":
             st.session_state.activity_logs.insert(0, {
@@ -601,7 +616,6 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 2
 
     elif step == 2:
-        # STEP 3: EDGE
         prob_win = 0.88
         ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
         st.session_state.activity_logs.insert(0, {
@@ -611,7 +625,6 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 3
 
     elif step == 3:
-        # STEP 4: KELLY
         kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
         st.session_state.activity_logs.insert(0, {
             "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
@@ -620,7 +633,6 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 4
 
     elif step == 4:
-        # STEP 5: TAKER
         kelly_usd = calculate_kelly_size(prob_win=0.88, bankroll=100.0)
         order_res = execute_order(ticker, "BUY", kelly_usd)
         if order_res["success"]:
@@ -636,7 +648,6 @@ def advance_pipeline_step(ticker):
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # STEP 6: CLOSER & RESET TO 0!
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
         for c in closed:
             st.session_state.resolved_count += 1
