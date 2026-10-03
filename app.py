@@ -19,7 +19,7 @@ from alpaca.data.requests import NewsRequest
 
 # 1. Page Configuration & Dan1ro0 Tactical Dark Theme
 st.set_page_config(
-    page_title="ATS MATRIX // SIGNAL STACK v3.4",
+    page_title="ATS MATRIX // SIGNAL STACK v3.6",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -87,7 +87,7 @@ st.markdown("""
     .pipeline-grid {
         display: flex;
         gap: 8px;
-        margin: 10px 0;
+        margin-top: 10px;
     }
     .node-box {
         flex: 1;
@@ -113,6 +113,23 @@ st.markdown("""
         font-weight: 700;
         margin-top: 4px;
         color: #f0f6fc;
+    }
+
+    /* Pipeline Progress Bar */
+    .progress-track {
+        background: #0d1117;
+        border: 1px solid #1f2633;
+        border-radius: 4px;
+        height: 6px;
+        width: 100%;
+        overflow: hidden;
+        margin-top: 8px;
+    }
+    .progress-fill {
+        background: linear-gradient(90deg, #00b4d8, #00f076);
+        height: 100%;
+        box-shadow: 0 0 8px rgba(0, 240, 118, 0.6);
+        transition: width 0.4s ease;
     }
 
     /* Metric Cards */
@@ -272,6 +289,9 @@ if "pipeline_state" not in st.session_state:
         "closer": "GUARDING BTC"
     }
 
+if "cycle_progress" not in st.session_state:
+    st.session_state.cycle_progress = 100
+
 # 2. Market Regime Radar
 def calculate_market_regime():
     r_val = random.random()
@@ -318,7 +338,7 @@ def fetch_live_news(ticker: str):
 def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: float = 100.0):
     p, q, b = prob_win, 1.0 - prob_win, payoff_ratio
     kelly_f = max(0.0, (b * p - q) / b)
-    stake = round(bankroll * (kelly_f * 0.25), 2) # Quarter-Kelly
+    stake = round(bankroll * (kelly_f * 0.25), 2)
     return max(5.0, min(35.0, stake)) if stake > 0 else 0.0
 
 # 5. TP / SL Execution
@@ -358,7 +378,7 @@ def execute_order(symbol: str, action: str, notional_usd: float):
 # Top Desk Header
 st.markdown("""
     <div class="terminal-header">
-        <div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v3.4 • TELEMETRY</span></div>
+        <div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v3.6 • AUTONOMOUS</span></div>
         <div class="live-pill">● QUANT PIPELINE ONLINE</div>
     </div>
 """, unsafe_allow_html=True)
@@ -378,7 +398,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ATS Matrix Institutional Quant Metrics (Win Rate, Profit Factor, Sharpe, Max Drawdown)
+# ATS Matrix Quant Metrics
 current_equity = account_data["equity"]
 paper_pnl = current_equity - 100000.0
 paper_pnl_pct = (paper_pnl / 100000.0) * 100
@@ -400,7 +420,7 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">{sharpe_ratio:.2f} <span style="font-size:11px; color:#ffb703;">({max_drawdown}%)</span></div></div>""", unsafe_allow_html=True)
 
-# 6-Node Signal Pipeline
+# The 6-Node Signal Pipeline
 ps = st.session_state.pipeline_state
 st.markdown(f"""
     <div class="pipeline-grid">
@@ -429,9 +449,18 @@ st.markdown(f"""
             <div class="node-val">{ps['closer']}</div>
         </div>
     </div>
+    
+    <!-- Dynamic Progress Bar at bottom of 6-Node Pipeline -->
+    <div class="progress-track">
+        <div class="progress-fill" style="width: {st.session_state.cycle_progress}%;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-top:3px; margin-bottom:8px;">
+        <span>PIPELINE TELEMETRY: <b>SYNCED [1 → 6]</b></span>
+        <span>SWARM CYCLE PROGRESS: <b style="color:#00f076;">{st.session_state.cycle_progress}%</b></span>
+    </div>
 """, unsafe_allow_html=True)
 
-# Spectrogram / Signal Frequency Visualizer (Dan1ro0 Signature)
+# Spectrogram / Signal Frequency Visualizer
 hz = random.randint(138, 156)
 bars = "".join(random.choice(["|", "‖", "l", "!", "I"]) for _ in range(48))
 st.markdown(f"""
@@ -491,7 +520,7 @@ with col_right:
 
 st.divider()
 
-# Controls: Regime Guard & Pipeline Execution
+# Controls: Clean Hands-Free Dashboard
 c1, c2 = st.columns([1, 2])
 
 with c1:
@@ -513,7 +542,7 @@ with c1:
             st.rerun()
 
 with c2:
-    st.subheader("💼 Inventory & Signal Trigger")
+    st.subheader("💼 Active Inventory & Swarm Ingestion")
     try:
         open_pos = trading_client.get_all_positions() if trading_client else []
         if open_pos:
@@ -526,11 +555,14 @@ with c2:
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
     live_news = fetch_live_news(selected_ticker)
-    curr_h = st.text_input("Active Signal / Tape Anomaly:", value=live_news[0] if live_news else "ETF accumulation sweeps institutional liquidity pools.")
-    exec_pipeline = st.button("🚀 Push Signal Through Pipeline", use_container_width=True)
+    
+    # Real-time Autonomous Stream Monitor (No manual buttons)
+    st.caption("📡 Autonomous News Wire Stream Ingested:")
+    st.info(f"**Latest Tape:** {live_news[0] if live_news else 'Scanning liquidity venues...'}")
 
-# The Full 6-Node Pipeline Engine
+# The Full 6-Node Autonomous Pipeline Engine
 def run_pipeline(headline, ticker):
+    st.session_state.cycle_progress = 15
     closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
     for c in closed:
         st.session_state.trade_logs.insert(0, {
@@ -547,6 +579,7 @@ def run_pipeline(headline, ticker):
         st.toast(f"CLOSER: {c['action']} on {c['sym']} ({c['pnl_pct']:+.2f}%)")
 
     # Step 1: SPOTTER
+    st.session_state.cycle_progress = 35
     st.session_state.pipeline_state["spotter"] = "TRIGGERED"
 
     # Step 2: REGIME CHECK (Gatekeeper)
@@ -554,18 +587,22 @@ def run_pipeline(headline, ticker):
     if curr_regime["state"] == "CHOP":
         st.session_state.pipeline_state["prior"] = "ABORT"
         st.session_state.pipeline_state["edge"] = "CHOP REGIME"
+        st.session_state.cycle_progress = 100
         st.warning(f"REGIME RADAR: Market in CHOP state ({curr_regime['chop']}%). Pipeline rejected trade to preserve capital.")
         return
 
     # Step 3: PRIOR (Bayesian Probability)
+    st.session_state.cycle_progress = 55
     prob_win = round(random.uniform(0.74, 0.92), 2)
     st.session_state.pipeline_state["prior"] = f"P={prob_win:.2f}"
 
     # Step 4: EDGE (Expected Value Gap)
+    st.session_state.cycle_progress = 75
     ev = round((prob_win * 1.8) - (1.0 - prob_win), 2)
     st.session_state.pipeline_state["edge"] = f"EV: +{ev*100:.0f}%"
 
     # Step 5: KELLY (Bet Sizing)
+    st.session_state.cycle_progress = 90
     kelly_usd = calculate_kelly_size(prob_win=prob_win, bankroll=100.0)
     st.session_state.pipeline_state["kelly"] = f"${kelly_usd:.2f}"
 
@@ -573,6 +610,7 @@ def run_pipeline(headline, ticker):
     st.session_state.pipeline_state["taker"] = "DISPATCHING"
     order_res = execute_order(ticker, "BUY", kelly_usd)
 
+    st.session_state.cycle_progress = 100
     if order_res["success"]:
         st.session_state.pipeline_state["taker"] = f"FILLED #{order_res['id']}"
         st.session_state.pipeline_state["closer"] = f"GUARDING {ticker}"
@@ -594,15 +632,12 @@ def run_pipeline(headline, ticker):
         fresh = fetch_account()
         st.session_state.balance_history.append(fresh["equity"])
         save_local_data(st.session_state.balance_history, st.session_state.trade_logs, auto_pilot, st.session_state.wins, st.session_state.total_trades)
-        st.success(f"PIPELINE COMPLETED: TAKER Filled {ticker} (${kelly_usd}) | Edge: +{ev*100:.0f}% EV")
         st.rerun()
     else:
         st.session_state.pipeline_state["taker"] = "REJECTED"
         st.error(f"TAKER FAILED: {order_res['msg']}")
 
-if exec_pipeline:
-    run_pipeline(curr_h, selected_ticker)
-
+# Fully Autonomous Loop (No button clicks needed)
 if auto_pilot:
     time.sleep(7)
     fresh_h = fetch_live_news(selected_ticker)
