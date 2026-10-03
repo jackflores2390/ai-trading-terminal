@@ -18,7 +18,7 @@ from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
 st.set_page_config(
-    page_title="ATS MATRIX // SIGNAL STACK v4.0",
+    page_title="ATS MATRIX // SIGNAL STACK v4.1",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -26,194 +26,189 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #07090d;
-        color: #d1d7e0;
-        font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, monospace;
-    }
-    .terminal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #161b22;
-        margin-bottom: 10px;
-    }
-    .desk-title {
-        font-size: 20px;
-        font-weight: 800;
-        letter-spacing: 1px;
-        color: #f0f6fc;
-    }
-    .live-pill {
-        background: #0d2818;
-        color: #00f076;
-        border: 1px solid #00f076;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 1.5px;
-    }
+.stApp {
+    background-color: #07090d;
+    color: #d1d7e0;
+    font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, monospace;
+}
+.terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #161b22;
+    margin-bottom: 10px;
+}
+.desk-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #f0f6fc;
+}
+.live-pill {
+    background: #0d2818;
+    color: #00f076;
+    border: 1px solid #00f076;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+}
+.regime-container {
+    display: flex;
+    gap: 12px;
+    background: #0d1117;
+    border: 1px solid #1f2633;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    align-items: center;
+    justify-content: space-between;
+}
+.regime-pill {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.regime-trend { background: #112a1c; color: #00f076; border: 1px solid #00f076; }
+.regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
+.regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
 
-    /* Regime Radar Bar */
-    .regime-container {
-        display: flex;
-        gap: 12px;
-        background: #0d1117;
-        border: 1px solid #1f2633;
-        border-radius: 6px;
-        padding: 6px 12px;
-        margin-bottom: 10px;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .regime-pill {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 1px;
-        padding: 2px 8px;
-        border-radius: 4px;
-    }
-    .regime-trend { background: #112a1c; color: #00f076; border: 1px solid #00f076; }
-    .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
-    .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
+.pipeline-grid {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 12px 0;
+    width: 100%;
+}
+.node-box {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #1f2633;
+    border-radius: 6px;
+    padding: 8px 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.node-box.active-node {
+    border: 1px solid #00f076;
+    box-shadow: 0 0 10px rgba(0, 240, 118, 0.2);
+    background: #111a16;
+}
+.node-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #8b949e;
+}
+.node-val {
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 3px;
+    margin-bottom: 6px;
+    color: #f0f6fc;
+}
+.node-progress-track {
+    background: #07090d;
+    border: 1px solid #1c2331;
+    border-radius: 2px;
+    height: 3px;
+    width: 100%;
+    overflow: hidden;
+}
+.node-progress-fill {
+    background: #00f076;
+    height: 100%;
+    box-shadow: 0 0 6px rgba(0, 240, 118, 0.8);
+}
 
-    /* Signal Stack Nodes */
-    .pipeline-grid {
-        display: flex;
-        gap: 8px;
-        margin: 8px 0;
-    }
-    .node-box {
-        flex: 1;
-        background: #0d1117;
-        border: 1px solid #1f2633;
-        border-radius: 6px;
-        padding: 8px 6px;
-        text-align: center;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .node-box.active-node {
-        border: 1px solid #00f076;
-        box-shadow: 0 0 10px rgba(0, 240, 118, 0.2);
-        background: #111a16;
-    }
-    .node-title {
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 1px;
-        color: #8b949e;
-    }
-    .node-val {
-        font-size: 11px;
-        font-weight: 700;
-        margin-top: 3px;
-        margin-bottom: 6px;
-        color: #f0f6fc;
-    }
-    .node-progress-track {
-        background: #07090d;
-        border: 1px solid #1c2331;
-        border-radius: 2px;
-        height: 3px;
-        width: 100%;
-        overflow: hidden;
-    }
-    .node-progress-fill {
-        background: #00f076;
-        height: 100%;
-        box-shadow: 0 0 6px rgba(0, 240, 118, 0.8);
-    }
+.stat-card {
+    background: #0d1117;
+    border: 1px solid #1f2633;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+.stat-title {
+    font-size: 9px;
+    color: #8b949e;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+.stat-number {
+    font-size: 16px;
+    font-weight: 800;
+    margin-top: 2px;
+}
+.c-green { color: #00f076; }
+.c-white { color: #f0f6fc; }
+.c-cyan { color: #00e5ff; }
 
-    /* Metric Cards */
-    .stat-card {
-        background: #0d1117;
-        border: 1px solid #1f2633;
-        border-radius: 6px;
-        padding: 8px 10px;
-    }
-    .stat-title {
-        font-size: 9px;
-        color: #8b949e;
-        text-transform: uppercase;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-    }
-    .stat-number {
-        font-size: 16px;
-        font-weight: 800;
-        margin-top: 2px;
-    }
-    .c-green { color: #00f076; }
-    .c-white { color: #f0f6fc; }
-    .c-cyan { color: #00e5ff; }
+.act-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 4px 0 8px 0;
+    color: #f0f6fc;
+    border-bottom: 1px solid #1f2633;
+}
+.act-container {
+    background: #0d1117;
+    border: 1px solid #1f2633;
+    border-radius: 6px;
+    padding: 6px 8px;
+    height: 350px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+}
+.act-row {
+    display: grid;
+    grid-template-columns: 14px 62px 58px 65px 1fr;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 4px;
+    border-bottom: 1px solid #131720;
+}
+.act-row.highlighted {
+    background: rgba(0, 240, 118, 0.06);
+    border-left: 2px solid #00f076;
+}
+.agent-spotter { color: #00e676; font-weight: 800; }
+.agent-prior   { color: #f59e0b; font-weight: 800; }
+.agent-edge    { color: #e040fb; font-weight: 800; }
+.agent-kelly   { color: #a855f7; font-weight: 800; }
+.agent-taker   { color: #3b82f6; font-weight: 800; }
+.agent-closer  { color: #ff7043; font-weight: 800; }
 
-    /* Exact Dan1ro0 Activity Log Styling */
-    .act-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 1px;
-        padding: 4px 0 8px 0;
-        color: #f0f6fc;
-        border-bottom: 1px solid #1f2633;
-    }
-    .act-container {
-        background: #0d1117;
-        border: 1px solid #1f2633;
-        border-radius: 6px;
-        padding: 8px 10px;
-        height: 360px;
-        overflow-y: auto;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
-    }
-    .act-row {
-        display: grid;
-        grid-template-columns: 14px 62px 58px 65px 1fr;
-        align-items: center;
-        gap: 6px;
-        padding: 5px 4px;
-        border-bottom: 1px solid #131720;
-    }
-    .act-row.highlighted {
-        background: rgba(0, 240, 118, 0.06);
-        border-left: 2px solid #00f076;
-    }
-    .agent-spotter { color: #00e676; font-weight: 800; }
-    .agent-prior   { color: #f59e0b; font-weight: 800; }
-    .agent-edge    { color: #e040fb; font-weight: 800; }
-    .agent-kelly   { color: #a855f7; font-weight: 800; }
-    .agent-taker   { color: #3b82f6; font-weight: 800; }
-    .agent-closer  { color: #ff7043; font-weight: 800; }
+.badge-scan     { background: rgba(0,230,118,0.15); color: #00e676; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-price    { background: rgba(245,158,11,0.18); color: #fbbf24; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-research { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-size     { background: rgba(168,85,247,0.18); color: #c084fc; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-fill     { background: rgba(239,68,68,0.18); color: #f87171; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-edge     { background: rgba(224,64,251,0.18); color: #e040fb; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
-    .badge-scan     { background: rgba(0,230,118,0.15); color: #00e676; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-price    { background: rgba(245,158,11,0.18); color: #fbbf24; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-research { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-size     { background: rgba(168,85,247,0.18); color: #c084fc; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-fill     { background: rgba(239,68,68,0.18); color: #f87171; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-    .badge-edge     { background: rgba(224,64,251,0.18); color: #e040fb; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
+.pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
+.pnl-dash { color: #64748b; font-weight: 600; text-align: right; }
+.act-desc { color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
-    .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
-    .pnl-dash { color: #64748b; font-weight: 600; text-align: right; }
-    .act-desc { color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    /* Active Agent Inspector Card */
-    .inspector-card {
-        background: #0d1117;
-        border: 1px solid #00f076;
-        box-shadow: 0 0 12px rgba(0, 240, 118, 0.15);
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin-top: 10px;
-    }
+.inspector-card {
+    background: #0d1117;
+    border: 1px solid #00f076;
+    box-shadow: 0 0 12px rgba(0, 240, 118, 0.15);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -295,9 +290,8 @@ if "total_trades" not in st.session_state:
     st.session_state.total_trades = stored.get("total", 43)
 if "resolved_count" not in st.session_state:
     st.session_state.resolved_count = stored.get("resolved", 31)
-
 if "active_agent_step" not in st.session_state:
-    st.session_state.active_agent_step = 4  # Kelly or Taker
+    st.session_state.active_agent_step = 4
 
 AGENTS_METRICS = {
     0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "ORDER FLOW SCANNER", "state": "Anomaly detected (+1.8σ tape speed)", "stat": "TAPE: 41 ticks/s"},
@@ -386,30 +380,10 @@ def execute_order(symbol: str, action: str, notional_usd: float):
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-# Header
-st.markdown("""
-    <div class="terminal-header">
-        <div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v4.0 • EVERY STEP TELEMETRY</span></div>
-        <div class="live-pill">● QUANT PIPELINE ONLINE</div>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown("""<div class="terminal-header"><div class="desk-title">GROK DESK // SIGNAL STACK <span style="font-size: 11px; color: #8b949e; font-weight: 500;">ATS MATRIX v4.1 • EVERY STEP TELEMETRY</span></div><div class="live-pill">● QUANT PIPELINE ONLINE</div></div>""", unsafe_allow_html=True)
 
-# Regime Radar
-st.markdown(f"""
-    <div class="regime-container">
-        <div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;
-            <span class="regime-pill {regime['color']}">STATE: {regime['state']}</span>
-        </div>
-        <div style="font-size: 11px;">
-            <span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;
-            <span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;
-            <span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span>
-        </div>
-        <div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
-# Metrics Row
 current_equity = account_data["equity"]
 paper_pnl = current_equity - 100000.0
 paper_pnl_pct = (paper_pnl / 100000.0) * 100
@@ -428,26 +402,20 @@ with m4:
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Sharpe / MDD</div><div class="stat-number c-white">3.12 <span style="font-size:10px; color:#ffb703;">(-0.42%)</span></div></div>""", unsafe_allow_html=True)
 
-# 6-Node Pipeline with Step Highlighting
+# 6-Node Pipeline Bar (Zero-indentation to prevent code block parsing)
 cur_step = st.session_state.active_agent_step
 node_names = ["1. SPOTTER", "2. PRIOR", "3. EDGE", "4. KELLY", "5. TAKER", "6. CLOSER"]
 node_tags = ["TRIGGERED", "P=0.91", "EV: +155%", "$21.50", "DISPATCHED", "GUARDING"]
 
-grid_html = "<div class='pipeline-grid'>"
+grid_pieces = ["<div class='pipeline-grid'>"]
 for idx in range(6):
     is_act = "active-node" if idx == cur_step else ""
     fill_w = "100%" if idx <= cur_step else "30%"
-    grid_html += f"""
-    <div class="node-box {is_act}">
-        <div class="node-title">{node_names[idx]}</div>
-        <div class="node-val">{node_tags[idx]}</div>
-        <div class="node-progress-track"><div class="node-progress-fill" style="width:{fill_w};"></div></div>
-    </div>
-    """
-grid_html += "</div>"
-st.markdown(grid_html, unsafe_allow_html=True)
+    grid_pieces.append(f"<div class='node-box {is_act}'><div class='node-title'>{node_names[idx]}</div><div class='node-val'>{node_tags[idx]}</div><div class='node-progress-track'><div class='node-progress-fill' style='width:{fill_w};'></div></div></div>")
+grid_pieces.append("</div>")
+st.markdown("".join(grid_pieces), unsafe_allow_html=True)
 
-# Main Section: Left Chart + Inspector vs Right Exact Activity Log
+# Main Grid: Left Chart + Inspector vs Right Activity Log
 col_left, col_right = st.columns([1.3, 1.2])
 
 with col_left:
@@ -473,30 +441,14 @@ with col_left:
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-    # Step 1 to 6 Active Agent Inspector Card (from Video)
     cur_ag = AGENTS_METRICS[cur_step]
-    st.markdown(f"""
-    <div class="inspector-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>ACTIVE STAGE: <b class="{cur_ag['tag']}">{cur_ag['name']}</b> &nbsp; <span style="font-size:10px; color:#8b949e;">[{cur_ag['role']}]</span></span>
-            <span style="font-size:11px; color:#00f076; font-weight:800;">{cur_ag['stat']}</span>
-        </div>
-        <div style="font-size:11px; color:#c9d1d9; margin-top:5px;">
-            ▸ <i>{cur_ag['state']}</i>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class="inspector-card"><div style="display:flex; justify-content:space-between; align-items:center;"><span>ACTIVE STAGE: <b class="{cur_ag['tag']}">{cur_ag['name']}</b> &nbsp; <span style="font-size:10px; color:#8b949e;">[{cur_ag['role']}]</span></span><span style="font-size:11px; color:#00f076; font-weight:800;">{cur_ag['stat']}</span></div><div style="font-size:11px; color:#c9d1d9; margin-top:5px;">▸ <i>{cur_ag['state']}</i></div></div>""", unsafe_allow_html=True)
 
 with col_right:
-    # Exact Activity Log from Image 1
-    st.markdown(f"""
-    <div class="act-header">
-        <span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span>
-        <span style="color:#8b949e;">{st.session_state.resolved_count} RESOLVED</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span><span style="color:#8b949e;">{st.session_state.resolved_count} RESOLVED</span></div>""", unsafe_allow_html=True)
 
-    act_html = "<div class='act-container'>"
+    # Activity Log Rows (Single-line zero-indent string construction)
+    row_pieces = ["<div class='act-container'>"]
     for item in st.session_state.activity_logs[:28]:
         hi_cls = "highlighted" if item.get("hi", False) else ""
         dot_color = item["dot"]
@@ -507,22 +459,12 @@ with col_right:
         pnl = item["pnl"]
         p_cls = item["p_cls"]
         desc = item["desc"]
-
-        act_html += f"""
-        <div class="act-row {hi_cls}">
-            <span style="color:{dot_color}; font-size:14px; line-height:1;">●</span>
-            <span class="{ag_tag}">{ag_name}</span>
-            <span class="{b_cls}">{badge}</span>
-            <span class="{p_cls}">{pnl}</span>
-            <span class="act-desc">{desc}</span>
-        </div>
-        """
-    act_html += "</div>"
-    st.markdown(act_html, unsafe_allow_html=True)
+        row_pieces.append(f"<div class='act-row {hi_cls}'><span style='color:{dot_color}; font-size:14px; line-height:1;'>●</span><span class='{ag_tag}'>{ag_name}</span><span class='{b_cls}'>{badge}</span><span class='{p_cls}'>{pnl}</span><span class='act-desc'>{desc}</span></div>")
+    row_pieces.append("</div>")
+    st.markdown("".join(row_pieces), unsafe_allow_html=True)
 
 st.divider()
 
-# Controls & Positions
 c1, c2 = st.columns([1, 2])
 
 with c1:
@@ -557,9 +499,7 @@ with c2:
 
     selected_ticker = st.selectbox("Market Feed", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
 
-# Multi-Step Quant Execution Engine
 def run_pipeline(headline, ticker):
-    # Step 0: Check Closer TP/SL
     closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
     for c in closed:
         st.session_state.resolved_count += 1
@@ -611,7 +551,7 @@ def run_pipeline(headline, ticker):
         "pnl": "—", "p_cls": "pnl-dash", "desc": f"stake sized against settled tickets · clip ${kelly_usd:.2f}", "hi": False
     })
 
-    # Step 5: TAKER Execution
+    # Step 5: TAKER
     st.session_state.active_agent_step = 4
     order_res = execute_order(ticker, "BUY", kelly_usd)
 
@@ -624,7 +564,7 @@ def run_pipeline(headline, ticker):
             "desc": f"took {ticker.split('/')[0]} market fill #{order_res['id']} at 12ms clip", "hi": False
         })
 
-        # Step 6: CLOSER takes custody
+        # Step 6: CLOSER
         st.session_state.active_agent_step = 5
         fresh = fetch_account()
         st.session_state.balance_history.append(fresh["equity"])
