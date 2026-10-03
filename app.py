@@ -84,6 +84,7 @@ st.markdown("""
 .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
 .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
 
+/* Reference Dan1ro0 6-Node Grid */
 .pipeline-grid {
     display: flex;
     gap: 8px;
@@ -359,7 +360,6 @@ def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: f
     stake = round(bankroll * (kelly_f * 0.25), 2)
     return max(5.0, min(25.0, stake)) if stake > 0 else 0.0
 
-# CLOSER SELLS THE TRADE (Evaluates Real TP / SL)
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
         return []
@@ -399,7 +399,7 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v5.2 • INTELLIGENT PATROL</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v5.4 • ORDER TABS</span></div>
     </div>
     <div class="live-pill">● QUANT PIPELINE ONLINE</div>
 </div>
@@ -423,7 +423,7 @@ with m2:
 with m3:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{true_win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({st.session_state.real_wins}/{st.session_state.settled_trades} settled)</span></div></div>""", unsafe_allow_html=True)
 with m4:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Active Basket</div><div class="stat-number c-cyan">3/3 ACTIVE</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Active Basket</div><div class="stat-number c-cyan">MULTI-PAIR</div></div>""", unsafe_allow_html=True)
 with m5:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Engine Mode</div><div class="stat-number c-white">PATROL / TP GUARD</div></div>""", unsafe_allow_html=True)
 
@@ -535,26 +535,56 @@ with c1:
             st.rerun()
 
 with c2:
-    st.subheader("💼 Active Inventory & Surveillance")
-    open_positions_map = {}
-    try:
-        open_pos = trading_client.get_all_positions() if trading_client else []
-        if open_pos:
-            pos_list = []
-            for p in open_pos:
-                open_positions_map[p.symbol] = float(p.qty)
-                pos_list.append({
-                    "Symbol": p.symbol, "Qty": f"{float(p.qty):.4f}",
-                    "Entry": f"${float(p.avg_entry_price):,.2f}", "Current": f"${float(p.current_price):,.2f}",
-                    "PnL ($)": f"${float(p.unrealized_pl):+,.2f}", "PnL (%)": f"{float(p.unrealized_plpc)*100:+,.2f}%"
-                })
-            st.dataframe(pd.DataFrame(pos_list), hide_index=True, use_container_width=True)
-        else:
-            st.caption("No open positions on Alpaca. Portfolio is 100% Cash.")
-    except Exception as e:
-        st.caption(f"Inventory query: {e}")
+    # TABBED INTERFACE: Open Positions & Real Broker Orders
+    tab_inventory, tab_orders = st.tabs(["💼 Active Inventory", "📋 Buy & Sell Orders (Broker Fills)"])
 
-# INTELLIGENT STEP MACHINE (Surveillance Mode when Basket is Full)
+    with tab_inventory:
+        try:
+            open_pos = trading_client.get_all_positions() if trading_client else []
+            if open_pos:
+                pos_list = []
+                for p in open_pos:
+                    pos_list.append({
+                        "Symbol": p.symbol, "Qty": f"{float(p.qty):.4f}",
+                        "Entry": f"${float(p.avg_entry_price):,.2f}", "Current": f"${float(p.current_price):,.2f}",
+                        "PnL ($)": f"${float(p.unrealized_pl):+,.2f}", "PnL (%)": f"{float(p.unrealized_plpc)*100:+,.2f}%"
+                    })
+                st.dataframe(pd.DataFrame(pos_list), hide_index=True, use_container_width=True)
+            else:
+                st.caption("No open positions on Alpaca. Portfolio is 100% Cash.")
+        except Exception as e:
+            st.caption(f"Inventory query: {e}")
+
+        st.caption("🌐 Active Multi-Pair Watchlist: **BTC/USD** • **ETH/USD** • **SOL/USD**")
+
+    with tab_orders:
+        try:
+            # Query recent filled and placed orders directly from Alpaca Broker
+            req = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=20)
+            alp_orders = trading_client.get_orders(filter=req) if trading_client else []
+            if alp_orders:
+                orders_table = []
+                for o in alp_orders:
+                    t_str = o.created_at.strftime("%H:%M:%S") if o.created_at else "--:--:--"
+                    side = str(o.side.value).upper()
+                    amt = f"${float(o.notional):.2f}" if o.notional else f"{float(o.qty or 0):.4f}"
+                    fill_p = f"${float(o.filled_avg_price):,.2f}" if o.filled_avg_price else "Pending"
+                    orders_table.append({
+                        "Time": t_str,
+                        "Side": side,
+                        "Symbol": o.symbol,
+                        "Amount": amt,
+                        "Filled Price": fill_p,
+                        "Status": str(o.status.value).upper(),
+                        "Order ID": str(o.id)[:8]
+                    })
+                st.dataframe(pd.DataFrame(orders_table), hide_index=True, use_container_width=True)
+            else:
+                st.caption("No orders placed yet.")
+        except Exception as e:
+            st.caption(f"Orders query: {e}")
+
+# INTELLIGENT STEP MACHINE
 def advance_pipeline_step():
     open_syms = set()
     open_pos_list = []
@@ -568,9 +598,8 @@ def advance_pipeline_step():
 
     available_pairs = [pair for pair in WATCHLIST if pair.replace("/", "") not in open_syms]
 
-    # IF ALL 3 POSITIONS ARE ACTIVE: ENTER CLOSER SURVEILLANCE (NO LOG SPAM)
     if len(available_pairs) == 0:
-        st.session_state.active_agent_step = 5 # Force CLOSER active
+        st.session_state.active_agent_step = 5
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
         if closed:
             for c in closed:
@@ -586,9 +615,8 @@ def advance_pipeline_step():
                 })
             fresh = fetch_account()
             st.session_state.balance_history.append(fresh["equity"])
-            st.session_state.active_agent_step = 0 # Slot freed! Awaken SPOTTER!
+            st.session_state.active_agent_step = 0
         else:
-            # Subtle heartbeat log every 10 ticks instead of every 2 seconds
             if random.random() < 0.20:
                 p_summary = " · ".join([f"{p.symbol}: {float(p.unrealized_plpc)*100:+.2f}%" for p in open_pos_list])
                 st.session_state.activity_logs.insert(0, {
@@ -600,7 +628,6 @@ def advance_pipeline_step():
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         return
 
-    # IF SLOTS ARE AVAILABLE: RUN THE 6-NODE PIPELINE NORMALLY
     step = st.session_state.active_agent_step
     target_pair = available_pairs[0]
 
