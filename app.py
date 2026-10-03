@@ -128,21 +128,23 @@ news_client = NewsClient(ALPACA_KEY, ALPACA_SECRET) if ALPACA_KEY and ALPACA_SEC
 
 HISTORY_FILE = "trade_history.json"
 
-def load_local_history():
+# State & Config Persistence
+def load_local_data():
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f:
                 return json.load(f)
         except Exception:
             pass
-    return {"balance_history": [], "trade_logs": []}
+    return {"balance_history": [], "trade_logs": [], "auto_pilot": False}
 
-def save_local_history(balance_history, trade_logs):
+def save_local_data(balance_history, trade_logs, auto_pilot_state):
     try:
         with open(HISTORY_FILE, "w") as f:
             json.dump({
                 "balance_history": balance_history[-40:],
-                "trade_logs": trade_logs[:40]
+                "trade_logs": trade_logs[:40],
+                "auto_pilot": auto_pilot_state
             }, f, indent=2)
     except Exception:
         pass
@@ -184,13 +186,13 @@ def fetch_account():
         return {"equity": 100000.0, "cash": 100000.0, "buying_power": 100000.0}
 
 account_data = fetch_account()
-stored = load_local_history()
+stored = load_local_data()
 
 if "trade_logs" not in st.session_state:
-    st.session_state.trade_logs = stored["trade_logs"] if stored["trade_logs"] else fetch_alpaca_history()
+    st.session_state.trade_logs = stored.get("trade_logs") if stored.get("trade_logs") else fetch_alpaca_history()
 
 if "balance_history" not in st.session_state:
-    if stored["balance_history"] and len(stored["balance_history"]) > 1:
+    if stored.get("balance_history") and len(stored["balance_history"]) > 1:
         st.session_state.balance_history = stored["balance_history"]
         if st.session_state.balance_history[-1] != account_data["equity"]:
             st.session_state.balance_history.append(account_data["equity"])
@@ -210,7 +212,7 @@ AGENTS = [
 
 curr_agent = AGENTS[st.session_state.active_agent_idx]
 
-# 2. Automated Take-Profit & Stop-Loss Engine
+# Take-Profit & Stop-Loss Engine
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
         return []
@@ -222,11 +224,9 @@ def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
             pnl_usd = float(p.unrealized_pl)
             sym = p.symbol
 
-            # Check Take-Profit
             if pnl_pct >= tp_pct:
                 trading_client.close_position(sym)
                 closed_events.append({"action": "TAKE-PROFIT", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd})
-            # Check Stop-Loss
             elif pnl_pct <= -abs(sl_pct):
                 trading_client.close_position(sym)
                 closed_events.append({"action": "STOP-LOSS", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd})
@@ -234,7 +234,7 @@ def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
         pass
     return closed_events
 
-# 3. Live News Ingestion
+# Live News Ingestion
 def fetch_live_news(ticker: str):
     headlines = []
     clean_sym = ticker.split("/")[0]
@@ -264,7 +264,7 @@ def fetch_live_news(ticker: str):
         headlines = [f"Institutional accumulation surges as {clean_sym} approaches breakout point."]
     return headlines
 
-# 4. Multi-Agent Fallback Logic
+# Multi-Agent Fallback Logic
 def multi_agent_fallback(headline: str, agent: dict):
     h = headline.lower()
     bull_words = ["surge", "record", "inflow", "breakout", "rally", "buy", "gain", "bull", "accumulate", "jump", "soar", "high"]
@@ -274,7 +274,7 @@ def multi_agent_fallback(headline: str, agent: dict):
     bear_score = sum(1 for w in bear_words if w in h)
 
     if agent["name"] == "DUSKA" and bear_score > 0:
-        return {"action": "BUY", "confidence": 0.82, "reason": "Duska: Buying the panic dip"}
+        return {"action": "BUY", "confidence": 0.82, "reason": "Duska: Buying panic dip"}
     if agent["name"] == "ORVEN" and bull_score > 0:
         return {"action": "BUY", "confidence": 0.88, "reason": "Orven: Momentum breakout"}
 
@@ -395,7 +395,7 @@ with col_right:
 # Risk Guard Heartbeat
 st.markdown(f"""
     <div class="heartbeat-bar">
-        <span>🛡️ RISK ENGINE ACTIVE: &nbsp; ∿∿∿/\∿∿/\∿∿/\∿∿∿ &nbsp; [POSITIONS MONITORED]</span>
+        <span>🛡️ RISK ENGINE ACTIVE: &nbsp; ∿∿∿/\∿∿/\∿∿/\∿∿/\∿∿∿ &nbsp; [POSITIONS MONITORED]</span>
         <span>AGENT: {curr_agent['name']} • {curr_agent['style']}</span>
     </div>
 """, unsafe_allow_html=True)
@@ -417,7 +417,16 @@ col_ctrl1, col_ctrl2 = st.columns([1, 2])
 
 with col_ctrl1:
     st.subheader("⚙️ Automated Risk Guard")
-    auto_pilot = st.toggle("⚡ ACTIVATE AUTO-PILOT & TP/SL GUARD", value=False)
+    
+    # Read persisted auto_pilot state so browser refreshes NEVER stop the engine
+    saved_ap = stored.get("auto_pilot", False)
+    auto_pilot = st.toggle("⚡ ACTIVATE AUTO-PILOT & TP/SL GUARD", value=saved_ap)
+    
+    # If the user toggled it, immediately save the new state to disk
+    if auto_pilot != saved_ap:
+        save_local_data(st.session_state.balance_history, st.session_state.trade_logs, auto_pilot)
+        st.rerun()
+
     tp_target = st.slider("Take-Profit Target (+%)", 0.5, 5.0, 1.5, step=0.1)
     sl_target = st.slider("Stop-Loss Target (-%)", 0.3, 3.0, 1.0, step=0.1)
     
@@ -431,7 +440,6 @@ with col_ctrl1:
 
 with col_ctrl2:
     st.subheader("💼 Open Positions & Manual Trigger")
-    # Show active open positions table
     try:
         open_pos = trading_client.get_all_positions() if trading_client else []
         if open_pos:
@@ -471,7 +479,7 @@ def run_cycle():
             "agent": "GUARD",
             "reason": f"Automatic {c['action']} at {c['pnl_pct']:+.2f}%"
         })
-        save_local_history(st.session_state.balance_history, st.session_state.trade_logs)
+        save_local_data(st.session_state.balance_history, st.session_state.trade_logs, auto_pilot)
         st.toast(f"🛡️ Guard: {c['action']} triggered on {c['sym']} ({c['pnl_pct']:+.2f}%)!")
 
     # 2. Ingest news & evaluate entry
@@ -498,7 +506,7 @@ def run_cycle():
             fresh = fetch_account()
             st.session_state.balance_history.append(fresh["equity"])
             st.session_state.active_agent_idx = (st.session_state.active_agent_idx + 1) % len(AGENTS)
-            save_local_history(st.session_state.balance_history, st.session_state.trade_logs)
+            save_local_data(st.session_state.balance_history, st.session_state.trade_logs, auto_pilot)
             st.success(f"{ag['name']} Executed {action} {selected_ticker} (${order_size})! Reason: {reason}")
             st.rerun()
 
@@ -506,6 +514,6 @@ if manual_exec:
     run_cycle()
 
 if auto_pilot:
-    time.sleep(6) # 6-second monitor loop
+    time.sleep(6)
     run_cycle()
     st.rerun()
