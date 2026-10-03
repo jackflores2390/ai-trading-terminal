@@ -19,8 +19,8 @@ from alpaca.data.requests import NewsRequest
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="AI Agent Terminal | Multi-Agent Network",
-    page_icon="🤖",
+    page_title="AI Agent Terminal | Auto TP/SL Guard",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -97,6 +97,8 @@ st.markdown("""
     }
     .buy-tag { color: #00f076; font-weight: bold; }
     .sell-tag { color: #ff5252; font-weight: bold; }
+    .tp-tag { color: #00e5ff; font-weight: bold; }
+    .sl-tag { color: #ff9100; font-weight: bold; }
     .heartbeat-bar {
         background: #13171d;
         border: 1px solid #21262d;
@@ -198,53 +200,41 @@ if "balance_history" not in st.session_state:
 if "active_agent_idx" not in st.session_state:
     st.session_state.active_agent_idx = 1
 
-# Milestone 3: 5 Distinct Agent Profiles
 AGENTS = [
-    {
-        "name": "ORVEN",
-        "icon": "🔵",
-        "type": "MOMENTUM",
-        "min_conf": 0.65,
-        "style": "Aggressive trend and hype chaser. Buys surges immediately.",
-        "prompt": "You are ORVEN, an aggressive momentum trader. Buy aggressively when there is social hype, whale volume, or upside surges. Accept lower confirmation."
-    },
-    {
-        "name": "BRAVA",
-        "icon": "🔶",
-        "type": "SCALPER",
-        "min_conf": 0.75,
-        "style": "High-frequency scalper. Enters fast liquidity sweeps.",
-        "prompt": "You are BRAVA, a fast scalper. Only trade rapid order-flow imbalance or immediate volume spikes. Strict on noise."
-    },
-    {
-        "name": "MIRAX",
-        "icon": "⚪",
-        "type": "BREAKOUT",
-        "min_conf": 0.75,
-        "style": "Catalyst specialist. Trades macro approvals and ETF news.",
-        "prompt": "You are MIRAX, a breakout catalyst trader. Look strictly for fundamental catalysts: ETF inflows, listings, regulatory approvals, institutional accumulation."
-    },
-    {
-        "name": "DUSKA",
-        "icon": "🔺",
-        "type": "REVERSAL",
-        "min_conf": 0.70,
-        "style": "Contrarian dip buyer. Buys panic selloffs and liquidations.",
-        "prompt": "You are DUSKA, a contrarian dip hunter. When you see bad headlines, panic, or crashes, look for overreactions and BUY the dip. Sells euphoria."
-    },
-    {
-        "name": "NOA",
-        "icon": "🟩",
-        "type": "ARBITRAGE",
-        "min_conf": 0.85,
-        "style": "Ultra-conservative. Highest confidence threshold only.",
-        "prompt": "You are NOA, a risk-averse quantitative agent. Only approve BUY or SELL if conviction is extraordinarily high (>0.85). Default to HOLD if in doubt."
-    }
+    {"name": "ORVEN", "icon": "🔵", "type": "MOMENTUM", "min_conf": 0.65, "style": "Aggressive trend and hype chaser.", "prompt": "You are ORVEN, aggressive momentum trader. Buy surges immediately."},
+    {"name": "BRAVA", "icon": "🔶", "type": "SCALPER", "min_conf": 0.75, "style": "High-frequency scalper. Enters liquidity sweeps.", "prompt": "You are BRAVA, rapid scalper. Enters order-flow imbalance."},
+    {"name": "MIRAX", "icon": "⚪", "type": "BREAKOUT", "min_conf": 0.75, "style": "Catalyst specialist. ETF inflows & listing news.", "prompt": "You are MIRAX, breakout trader looking for macro catalyst headlines."},
+    {"name": "DUSKA", "icon": "🔺", "type": "REVERSAL", "min_conf": 0.70, "style": "Contrarian dip buyer. Buys panic drops.", "prompt": "You are DUSKA, contrarian buyer. Buys overreacted market panic."},
+    {"name": "NOA", "icon": "🟩", "type": "ARBITRAGE", "min_conf": 0.85, "style": "Ultra-conservative. Highest confidence only.", "prompt": "You are NOA, risk-averse quant. High conviction only (>0.85)."}
 ]
 
 curr_agent = AGENTS[st.session_state.active_agent_idx]
 
-# Live News Fetcher
+# 2. Automated Take-Profit & Stop-Loss Engine
+def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
+    if not trading_client:
+        return []
+    closed_events = []
+    try:
+        positions = trading_client.get_all_positions()
+        for p in positions:
+            pnl_pct = float(p.unrealized_plpc) * 100.0
+            pnl_usd = float(p.unrealized_pl)
+            sym = p.symbol
+
+            # Check Take-Profit
+            if pnl_pct >= tp_pct:
+                trading_client.close_position(sym)
+                closed_events.append({"action": "TAKE-PROFIT", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd})
+            # Check Stop-Loss
+            elif pnl_pct <= -abs(sl_pct):
+                trading_client.close_position(sym)
+                closed_events.append({"action": "STOP-LOSS", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd})
+    except Exception:
+        pass
+    return closed_events
+
+# 3. Live News Ingestion
 def fetch_live_news(ticker: str):
     headlines = []
     clean_sym = ticker.split("/")[0]
@@ -256,7 +246,6 @@ def fetch_live_news(ticker: str):
                     headlines.append(item.headline)
         except Exception:
             pass
-
     if not headlines:
         try:
             feed_url = "https://cointelegraph.com/rss"
@@ -271,12 +260,11 @@ def fetch_live_news(ticker: str):
                         break
         except Exception:
             pass
-
     if not headlines:
         headlines = [f"Institutional accumulation surges as {clean_sym} approaches breakout point."]
     return headlines
 
-# Multi-Agent Local Fallback
+# 4. Multi-Agent Fallback Logic
 def multi_agent_fallback(headline: str, agent: dict):
     h = headline.lower()
     bull_words = ["surge", "record", "inflow", "breakout", "rally", "buy", "gain", "bull", "accumulate", "jump", "soar", "high"]
@@ -285,25 +273,17 @@ def multi_agent_fallback(headline: str, agent: dict):
     bull_score = sum(1 for w in bull_words if w in h)
     bear_score = sum(1 for w in bear_words if w in h)
 
-    # Duska buys panic dips
     if agent["name"] == "DUSKA" and bear_score > 0:
-        return {"action": "BUY", "confidence": 0.82, "reason": "Duska Contrarian: Buying the panic dip"}
-    
-    # Orven buys momentum fast
+        return {"action": "BUY", "confidence": 0.82, "reason": "Duska: Buying the panic dip"}
     if agent["name"] == "ORVEN" and bull_score > 0:
-        return {"action": "BUY", "confidence": 0.88, "reason": "Orven Momentum: High hype detected"}
+        return {"action": "BUY", "confidence": 0.88, "reason": "Orven: Momentum breakout"}
 
-    # General logic
     if bull_score > bear_score:
-        conf = min(0.95, 0.70 + (bull_score * 0.10))
-        return {"action": "BUY", "confidence": conf, "reason": f"{agent['name']} Thesis: Bullish alignment"}
+        return {"action": "BUY", "confidence": min(0.95, 0.70 + (bull_score * 0.10)), "reason": f"{agent['name']}: Bullish signal"}
     elif bear_score > bull_score:
-        conf = min(0.95, 0.70 + (bear_score * 0.10))
-        return {"action": "SELL", "confidence": conf, "reason": f"{agent['name']} Thesis: Bearish risk detected"}
-    else:
-        return {"action": "HOLD", "confidence": 0.50, "reason": f"{agent['name']}: Neutral sentiment"}
+        return {"action": "SELL", "confidence": min(0.95, 0.70 + (bear_score * 0.10)), "reason": f"{agent['name']}: Bearish risk"}
+    return {"action": "HOLD", "confidence": 0.50, "reason": "Neutral sentiment"}
 
-# Decision Engine with Custom Agent Prompts
 def get_decision(headline: str, symbol: str, agent: dict):
     if gemini_client:
         prompt = f"""
@@ -342,7 +322,7 @@ def execute_order(symbol: str, action: str, notional_usd: float):
 # Header
 st.markdown(f"""
     <div class="terminal-header">
-        <div class="bot-title">⚡ Grok/Gemini Terminal <span style="font-size: 13px; color: #8b949e; font-weight: 400;">ACTIVE AGENT: <b>{curr_agent['icon']} {curr_agent['name']}</b> ({curr_agent['type']})</span></div>
+        <div class="bot-title">🛡️ Gemini Terminal <span style="font-size: 13px; color: #8b949e; font-weight: 400;">ACTIVE: <b>{curr_agent['icon']} {curr_agent['name']}</b> ({curr_agent['type']}) • AUTO TP/SL GUARD</span></div>
         <div class="live-badge">● LIVE SANDBOX CONNECTED</div>
     </div>
 """, unsafe_allow_html=True)
@@ -351,7 +331,6 @@ st.markdown(f"""
 current_equity = account_data["equity"]
 paper_pnl = current_equity - 100000.0
 paper_pnl_pct = (paper_pnl / 100000.0) * 100
-total_trades = len(st.session_state.trade_logs)
 
 m1, m2, m3, m4 = st.columns(4)
 with m1:
@@ -362,7 +341,7 @@ with m2:
 with m3:
     st.markdown(f"""<div class="stat-box"><div class="stat-label">Buying Power</div><div class="stat-value val-white">${account_data['buying_power']:,.2f}</div></div>""", unsafe_allow_html=True)
 with m4:
-    st.markdown(f"""<div class="stat-box"><div class="stat-label">Active Agent Thesis</div><div class="stat-value val-green">{curr_agent['name']} <span style="font-size:11px; color:#8b949e;">(Min Conf: {curr_agent['min_conf']*100:.0f}%)</span></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-box"><div class="stat-label">Active Agent Thesis</div><div class="stat-value val-green">{curr_agent['name']} <span style="font-size:11px; color:#8b949e;">(Min: {curr_agent['min_conf']*100:.0f}%)</span></div></div>""", unsafe_allow_html=True)
 
 st.write("")
 
@@ -399,22 +378,29 @@ with col_right:
         log_html += "<div style='color: #8b949e; text-align: center; margin-top: 130px;'>No trades yet.</div>"
     else:
         for item in st.session_state.trade_logs[:25]:
-            cls = "buy-tag" if item['action'] == "BUY" else "sell-tag"
+            act = item['action']
+            if "TAKE-PROFIT" in act:
+                cls = "tp-tag"
+            elif "STOP-LOSS" in act:
+                cls = "sl-tag"
+            elif act == "BUY":
+                cls = "buy-tag"
+            else:
+                cls = "sell-tag"
             agent_tag = item.get("agent", "AI")
-            log_html += f"<div class='log-row'><span>{item['time']} <span class='{cls}'>{item['action']}</span> {item['sym']} <small style='color:#8b949e;'>[{agent_tag}]</small></span><span>{item['amt']} <small style='color:#8b949e;'>ID:{item['id']}</small></span></div>"
+            log_html += f"<div class='log-row'><span>{item['time']} <span class='{cls}'>{act}</span> {item['sym']} <small style='color:#8b949e;'>[{agent_tag}]</small></span><span>{item['amt']} <small style='color:#8b949e;'>ID:{item['id']}</small></span></div>"
     log_html += "</div>"
     st.markdown(log_html, unsafe_allow_html=True)
 
-# Heartbeat
+# Risk Guard Heartbeat
 st.markdown(f"""
     <div class="heartbeat-bar">
-        <span>ENGINE HEARTBEAT: &nbsp; ∿∿∿/\∿∿/\∿∿/\∿∿∿ &nbsp; [AGENT ACTIVE: {curr_agent['name']}]</span>
-        <span>STRATEGY: {curr_agent['style']}</span>
+        <span>🛡️ RISK ENGINE ACTIVE: &nbsp; ∿∿∿/\∿∿/\∿∿/\∿∿∿ &nbsp; [POSITIONS MONITORED]</span>
+        <span>AGENT: {curr_agent['name']} • {curr_agent['style']}</span>
     </div>
 """, unsafe_allow_html=True)
 
-# Interactive Agent Rotation Deck (Clickable buttons!)
-st.caption("🤖 Select or Rotate AI Agents:")
+# Interactive Agent Deck
 agent_cols = st.columns(len(AGENTS))
 for i, ag in enumerate(AGENTS):
     with agent_cols[i]:
@@ -426,56 +412,100 @@ for i, ag in enumerate(AGENTS):
 
 st.divider()
 
-# Controls
-c1, c2 = st.columns([1, 2])
-with c1:
-    auto_pilot = st.toggle("⚡ ACTIVATE REAL-TIME AUTO-PILOT", value=False)
+# Controls: Risk Parameters & Automated Execution
+col_ctrl1, col_ctrl2 = st.columns([1, 2])
+
+with col_ctrl1:
+    st.subheader("⚙️ Automated Risk Guard")
+    auto_pilot = st.toggle("⚡ ACTIVATE AUTO-PILOT & TP/SL GUARD", value=False)
+    tp_target = st.slider("Take-Profit Target (+%)", 0.5, 5.0, 1.5, step=0.1)
+    sl_target = st.slider("Stop-Loss Target (-%)", 0.3, 3.0, 1.0, step=0.1)
+    
+    st.divider()
+    if st.button("🚨 EMERGENCY PANIC SELL ALL", use_container_width=True, type="primary"):
+        if trading_client:
+            trading_client.close_all_positions(cancel_orders=True)
+            st.success("All positions liquidated to cash.")
+            time.sleep(1)
+            st.rerun()
+
+with col_ctrl2:
+    st.subheader("💼 Open Positions & Manual Trigger")
+    # Show active open positions table
+    try:
+        open_pos = trading_client.get_all_positions() if trading_client else []
+        if open_pos:
+            pos_list = []
+            for p in open_pos:
+                pos_list.append({
+                    "Symbol": p.symbol,
+                    "Qty": f"{float(p.qty):.4f}",
+                    "Entry": f"${float(p.avg_entry_price):,.2f}",
+                    "Current": f"${float(p.current_price):,.2f}",
+                    "PnL ($)": f"${float(p.unrealized_pl):+,.2f}",
+                    "PnL (%)": f"{float(p.unrealized_plpc)*100:+,.2f}%"
+                })
+            st.dataframe(pd.DataFrame(pos_list), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No open positions on Alpaca right now.")
+    except Exception as e:
+        st.caption(f"Positions query: {e}")
+
     selected_ticker = st.selectbox("Trading Pair", ["BTC/USD", "ETH/USD", "SPY", "NVDA", "TSLA"])
     order_size = st.slider("Order Size ($USD)", 5.0, 50.0, 10.0, step=5.0)
-
-with c2:
     live_news_list = fetch_live_news(selected_ticker)
-    st.caption(f"📡 Latest Real-Time Headline for {curr_agent['name']}:")
     current_headline = st.text_input("Active Headline:", value=live_news_list[0] if live_news_list else "ETF accumulation accelerating across all venues.")
     manual_exec = st.button(f"🚀 Let {curr_agent['name']} Evaluate & Execute Order", use_container_width=True)
 
-def process_trade(headline, ticker, amount):
-    ag = AGENTS[st.session_state.active_agent_idx]
-    with st.spinner(f"Agent {ag['name']} is evaluating thesis..."):
-        verdict, engine_used = get_decision(headline, ticker, ag)
-        action = verdict.get("action", "HOLD")
-        confidence = verdict.get("confidence", 0.0)
-        reason = verdict.get("reason", "N/A")
+# Trade & TP/SL Processor
+def run_cycle():
+    # 1. First, check if any open positions hit TP or SL
+    closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
+    for c in closed:
+        st.session_state.trade_logs.insert(0, {
+            "time": time.strftime("%H:%M:%S"),
+            "action": c["action"],
+            "sym": c["sym"],
+            "amt": f"{c['pnl_pct']:+.2f}%",
+            "id": f"${c['pnl_usd']:+.2f}",
+            "agent": "GUARD",
+            "reason": f"Automatic {c['action']} at {c['pnl_pct']:+.2f}%"
+        })
+        save_local_history(st.session_state.balance_history, st.session_state.trade_logs)
+        st.toast(f"🛡️ Guard: {c['action']} triggered on {c['sym']} ({c['pnl_pct']:+.2f}%)!")
 
-        if action in ["BUY", "SELL"] and confidence >= ag["min_conf"]:
-            order_res = execute_order(ticker, action, amount)
-            if order_res["success"]:
-                st.session_state.trade_logs.insert(0, {
-                    "time": time.strftime("%H:%M:%S"),
-                    "action": action,
-                    "sym": ticker.split("/")[0],
-                    "amt": f"${amount:.2f}",
-                    "id": order_res["id"],
-                    "agent": ag["name"],
-                    "reason": reason
-                })
-                fresh = fetch_account()
-                st.session_state.balance_history.append(fresh["equity"])
-                # Rotate to next agent
-                st.session_state.active_agent_idx = (st.session_state.active_agent_idx + 1) % len(AGENTS)
-                save_local_history(st.session_state.balance_history, st.session_state.trade_logs)
-                st.success(f"{ag['name']} Executed {action} {ticker} (${amount})! Reason: {reason}")
-                st.rerun()
-            else:
-                st.error(f"Alpaca Order Rejected: {order_res['msg']}")
-        else:
-            st.info(f"{ag['name']} decided {action} (Confidence: {confidence:.2f} < Min {ag['min_conf']}). Reason: {reason}")
+    # 2. Ingest news & evaluate entry
+    ag = AGENTS[st.session_state.active_agent_idx]
+    headlines = fetch_live_news(selected_ticker)
+    selected_h = random.choice(headlines)
+    verdict, engine_used = get_decision(selected_h, selected_ticker, ag)
+    action = verdict.get("action", "HOLD")
+    confidence = verdict.get("confidence", 0.0)
+    reason = verdict.get("reason", "N/A")
+
+    if action in ["BUY", "SELL"] and confidence >= ag["min_conf"]:
+        order_res = execute_order(selected_ticker, action, order_size)
+        if order_res["success"]:
+            st.session_state.trade_logs.insert(0, {
+                "time": time.strftime("%H:%M:%S"),
+                "action": action,
+                "sym": selected_ticker.split("/")[0],
+                "amt": f"${order_size:.2f}",
+                "id": order_res["id"],
+                "agent": ag["name"],
+                "reason": reason
+            })
+            fresh = fetch_account()
+            st.session_state.balance_history.append(fresh["equity"])
+            st.session_state.active_agent_idx = (st.session_state.active_agent_idx + 1) % len(AGENTS)
+            save_local_history(st.session_state.balance_history, st.session_state.trade_logs)
+            st.success(f"{ag['name']} Executed {action} {selected_ticker} (${order_size})! Reason: {reason}")
+            st.rerun()
 
 if manual_exec:
-    process_trade(current_headline, selected_ticker, order_size)
+    run_cycle()
 
 if auto_pilot:
-    time.sleep(8)
-    fresh_headlines = fetch_live_news(selected_ticker)
-    selected_h = random.choice(fresh_headlines)
-    process_trade(selected_h, selected_ticker, order_size)
+    time.sleep(6) # 6-second monitor loop
+    run_cycle()
+    st.rerun()
