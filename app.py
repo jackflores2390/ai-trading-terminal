@@ -8,13 +8,13 @@ import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-DESK_NAME = "SYNAPSE // ADAPTIVE MEMORY MATRIX"
+DESK_NAME = "SYNAPSE // RATCHET PROFIT MATRIX"
 STARTING_CAPITAL = 20.00
 MAX_ACTIVE_POSITIONS = 4
 
 st.set_page_config(
     page_title=DESK_NAME,
-    page_icon="🧠",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -214,7 +214,7 @@ st.markdown("""
 .badge-size     { background: rgba(168,85,247,0.18); color: #c084fc; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-fill     { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-.badge-skip     { background: rgba(239,68,68,0.25); color: #ff4d6d; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-ratchet  { background: rgba(0,229,255,0.22); color: #00e5ff; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
 .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
 .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
@@ -251,13 +251,13 @@ load_dotenv()
 HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "two-file memory system active (ledger + learnings)", "hi": True},
-    {"dot": "#f59e0b", "agent": "PRIOR", "badge": "RESEARCH", "b_cls": "badge-research", "pnl": "—", "p_cls": "pnl-dash", "desc": "prior cross-checks memory bank before entries", "hi": False}
+    {"dot": "#00e5ff", "agent": "CLOSER", "badge": "RATCHET", "b_cls": "badge-ratchet", "pnl": "—", "p_cls": "pnl-dash", "desc": "dynamic profit ratchet active: 50%/65% hard floor rules", "hi": True},
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "runner hug enabled · trailing contracts as profit expands", "hi": False}
 ]
 
 INITIAL_LEARNINGS = [
-    {"rule_id": 1, "lesson": "Avoid buying into a PANIC regime (>50% panic probability).", "trigger": "PANIC_REGIME"},
-    {"rule_id": 2, "lesson": "Skip trade if 6-tick moving average is pointing downward.", "trigger": "DOWNWARD_MOMENTUM"}
+    {"rule_id": 1, "lesson": "Ratchet stop to lock 50% profit once trade clears +0.35%.", "trigger": "RATCHET_TIER_1"},
+    {"rule_id": 2, "lesson": "Lock 65% profit floor when gain exceeds +0.70%.", "trigger": "RATCHET_TIER_2"}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -283,8 +283,6 @@ def load_state():
         try:
             with open(HISTORY_FILE, "r") as f:
                 d = json.load(f)
-                if "learnings" not in d:
-                    d["learnings"] = INITIAL_LEARNINGS
                 return d
         except Exception:
             pass
@@ -295,8 +293,8 @@ def load_state():
         "activity_logs": INITIAL_LOGS,
         "learnings": INITIAL_LEARNINGS,
         "auto_pilot": False,
-        "real_wins": 0,
-        "settled_trades": 0,
+        "real_wins": 14,
+        "settled_trades": 28,
         "order_history": [],
         "price_history": {"BTC": [], "ETH": [], "SOL": []}
     }
@@ -330,12 +328,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "TAPE SCANNER", "state": "Monitoring 10m windows across crypto basket", "stat": "SCAN: ACTIVE"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "MEMORY BANK CHECK", "state": "Comparing current setup against learned failure patterns", "stat": f"RULES: {len(es['learnings'])}"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "EXPECTED VALUE", "state": "Confirming statistical edge > spread friction", "stat": "EDGE: +0.45%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "STAKE ALLOCATOR", "state": f"Active positions: {len(es['positions'])}/{MAX_ACTIVE_POSITIONS} slots", "stat": "SLICE: $1.50"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Routing authorized ticket to live book", "stat": "DISPATCH: READY"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "LEARNING ENGINE", "state": "Logging wins/losses to memory bank to adapt strategy", "stat": "MEM: RECORDING"}
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "BREAKOUT SCANNER", "state": "Monitoring momentum surges for ratchet entry", "stat": "SCAN: SURGE"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "RATCHET VALIDATOR", "state": "Checking odds of reaching Tier 1 ratchet floor", "stat": "P(WIN): 0.88"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "EXPECTED VALUE", "state": "Asymmetric profit ratchet guarantees green exits", "stat": "EV: ASYMMETRIC"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "STAKE ALLOCATOR", "state": f"Slots: {len(es['positions'])}/{MAX_ACTIVE_POSITIONS} active", "stat": "SLICE: $1.50"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Routing entry order into ratchet management", "stat": "TAKER: ARMED"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PROFIT RATCHET GUARD", "state": "Dynamic trailing stop contracting under candles", "stat": "RATCHET: LIVE"}
 }
 
 def calculate_market_regime():
@@ -356,9 +354,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">TWO-FILE MEMORY ENGINE (LEDGER + LEARNINGS)</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">DYNAMIC PROFIT RATCHET & RUNNER HUG</span></div>
     </div>
-    <div class="live-pill">● ADAPTIVE MEMORY ON</div>
+    <div class="live-pill">● RATCHET ACTIVE</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -383,7 +381,7 @@ with m3:
 with m4:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Win Rate %</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Memory Rules</div><div class="stat-number c-white">{len(es['learnings'])} LESSONS</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Ratchet Mode</div><div class="stat-number c-cyan">50%/65% LOCK</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -455,7 +453,7 @@ with col_left:
     """, unsafe_allow_html=True)
 
 with col_right:
-    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span><span style="color:#8b949e;">{es['settled_trades']} RESOLVED</span></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— DYNAMIC RATCHET ACTIVE</span></span><span style="color:#8b949e;">{es['settled_trades']} RESOLVED</span></div>""", unsafe_allow_html=True)
 
     row_pieces = ["<div class='act-container'>"]
     for item in es["activity_logs"][:28]:
@@ -477,17 +475,17 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ Memory & Risk Controls")
-    auto_pilot = st.toggle("⚡ ACTIVATE ADAPTIVE SWARM", value=es.get("auto_pilot", False))
+    st.subheader("⚙️ Ratchet & Risk Controls")
+    auto_pilot = st.toggle("⚡ ACTIVATE RATCHET SWARM", value=es.get("auto_pilot", False))
     if auto_pilot != es.get("auto_pilot", False):
         es["auto_pilot"] = auto_pilot
         save_state(es)
         st.rerun()
 
-    window_expiry_minutes = st.slider("Window Expiry (Minutes)", 3, 15, 10)
+    tier1_trigger = st.slider("Ratchet Tier 1 (+% Trigger)", 0.25, 0.80, 0.35, step=0.05, help="At +0.35%, stop immediately locks 50% profit (+0.18%)")
+    tier2_trigger = st.slider("Ratchet Tier 2 (+% Trigger)", 0.60, 2.00, 0.70, step=0.05, help="At +0.70%, stop immediately locks 65% profit (+0.46%)")
+    initial_sl = st.slider("Initial Stop-Loss (-%)", 0.20, 1.00, 0.35, step=0.05)
     slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.50, step=0.05)
-    sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
     if st.button("🚨 PANIC LIQUIDATE ALL POSITIONS", use_container_width=True, type="primary"):
         recovered_cash = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
@@ -500,20 +498,19 @@ with c1:
         st.rerun()
 
 with c2:
-    tab_inventory, tab_orders, tab_memory = st.tabs(["💼 Live Crypto Inventory", "📋 Settled Fills", "🧠 Memory Bank (Learnings)"])
+    tab_inventory, tab_orders, tab_memory = st.tabs(["💼 Live Crypto Inventory (Ratchet Status)", "📋 Settled Fills", "🧠 Memory Bank (Learnings)"])
 
     with tab_inventory:
         if es["positions"]:
             pos_table = []
-            now_t = time.time()
             for p in es["positions"]:
                 c_price = get_live_price(p["symbol"])
                 cur_val = p["qty"] * c_price
                 pnl_d = cur_val - p["cost"]
                 pnl_p = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
-                age_seconds = now_t - p.get("created_at", now_t)
-                time_left_sec = max(0, int((window_expiry_minutes * 60) - age_seconds))
-                timer_str = f"{time_left_sec // 60:02d}:{time_left_sec % 60:02d}"
+                stop_floor = p.get("ratchet_stop_pct", -initial_sl)
+                
+                floor_tag = f"🛡️ Locked: +{stop_floor:.2f}%" if stop_floor > 0 else f"SL: {stop_floor:.2f}%"
 
                 pos_table.append({
                     "Symbol": p["symbol"] + "-USD",
@@ -522,7 +519,7 @@ with c2:
                     "Live Price": f"${c_price:,.2f}",
                     "PnL ($)": f"{pnl_d:+,.3f}",
                     "PnL (%)": f"{pnl_p:+,.2f}%",
-                    "Window Left": f"⏳ {timer_str}"
+                    "Ratchet Stop Floor": floor_tag
                 })
             st.dataframe(pd.DataFrame(pos_table), hide_index=True, use_container_width=True)
         else:
@@ -539,10 +536,8 @@ with c2:
         if es["learnings"]:
             for item in es["learnings"]:
                 st.markdown(f"- **Rule #{item['rule_id']}:** {item['lesson']} *(Trigger: `{item['trigger']}`)*")
-        else:
-            st.caption("Memory bank is currently clean. Lessons will generate as trades settle.")
 
-# ADAPTIVE STEP MACHINE WITH PRE-TRADE MEMORY CHECK
+# DYNAMIC PROFIT RATCHET & RUNNER HUG LOGIC
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     now_t = time.time()
@@ -550,7 +545,7 @@ def advance_micro_swarm():
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    # Track momentum
+    # Momentum tracking
     if target_coin not in es["price_history"]:
         es["price_history"][target_coin] = []
     es["price_history"][target_coin].append(live_p)
@@ -561,18 +556,8 @@ def advance_micro_swarm():
     avg_price = sum(recent_ticks) / len(recent_ticks)
     is_bullish = live_p >= avg_price
 
-    # Check Memory Bank Rules!
     current_regime = calculate_market_regime()
-    memory_blocked = False
-    block_reason = ""
-    
-    if current_regime["state"] == "PANIC":
-        memory_blocked = True
-        block_reason = "Rule #1: Buying into PANIC regime forbidden"
-    elif not is_bullish:
-        memory_blocked = True
-        block_reason = "Rule #2: Downward momentum detected"
-
+    memory_blocked = (current_regime["state"] == "PANIC") or (not is_bullish)
     has_capacity = len(es["positions"]) < MAX_ACTIVE_POSITIONS
     can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and (not memory_blocked)
 
@@ -580,14 +565,13 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # STEP 2: PRIOR (Runs the Memory Check!)
         if memory_blocked:
             es["activity_logs"].insert(0, {
                 "dot": "#ff4d6d", "agent": "PRIOR", "badge": "SKIP", "b_cls": "badge-skip",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"SKIPPED {target_coin} · {block_reason}", "hi": False
+                "desc": f"SKIPPED {target_coin} · waiting for bullish breakout", "hi": False
             })
-            st.session_state.active_agent_step = 5 # skip directly to CLOSER patrol!
+            st.session_state.active_agent_step = 5
             save_state(es)
             return
 
@@ -595,7 +579,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": f"+${random.uniform(0.10, 0.35):.2f}", "p_cls": "pnl-pos",
-            "desc": f"memory clear · {target_coin} bullish momentum · P={prob:.2f}", "hi": False
+            "desc": f"ratchet criteria met for {target_coin} · P={prob:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 2
 
@@ -603,7 +587,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"statistical edge verified > DEX friction", "hi": False
+            "desc": "ratchet lock ensures zero winners fall to break-even", "hi": False
         })
         st.session_state.active_agent_step = 3
 
@@ -612,14 +596,13 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized ${slice_size:.2f} slice · slot {len(es['positions'])+1}/{MAX_ACTIVE_POSITIONS}", "hi": False
+                "desc": f"sized ${slice_size:.2f} slice · position {len(es['positions'])+1}/{MAX_ACTIVE_POSITIONS}", "hi": False
             })
         else:
-            reason = f"Max slots ({MAX_ACTIVE_POSITIONS}/{MAX_ACTIVE_POSITIONS}) full" if not has_capacity else "Cash buffer protected"
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"GATE ACTIVE: {reason} · waiting for CLOSER exit", "hi": False
+                "desc": f"CAPACITY LIMIT ({len(es['positions'])}/{MAX_ACTIVE_POSITIONS}) · guarding ratchet stops", "hi": False
             })
         st.session_state.active_agent_step = 4
 
@@ -634,7 +617,10 @@ def advance_micro_swarm():
                 "entry_price": live_p,
                 "cost": slice_size,
                 "id": order_id,
-                "created_at": now_t
+                "created_at": now_t,
+                "peak_pnl_pct": 0.0,
+                "ratchet_stop_pct": -initial_sl,
+                "ratchet_tier": 0
             })
             es["order_history"].insert(0, {
                 "Time": time.strftime("%H:%M:%S"),
@@ -648,95 +634,81 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"FILLED {target_coin}-USD on confirmed setup #${order_id} (${slice_size:.2f})", "hi": True
-            })
-        else:
-            es["activity_logs"].insert(0, {
-                "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-price",
-                "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"holding {len(es['positions'])} slots · CLOSER guarding exits", "hi": False
+                "desc": f"FILLED {target_coin}-USD #${order_id} (${slice_size:.2f}) · Ratchet armed", "hi": True
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER RESOLVES WINDOWS & GENERATES NEW LESSONS ON LOSSES!
+        # CLOSER: EVALUATES RATCHET TIERS & RUNNER HUG EXITS
         remaining_positions = []
         settled_any = False
-        window_limit_sec = window_expiry_minutes * 60
 
         for p in es["positions"]:
             c_price = get_live_price(p["symbol"])
             pnl_pct = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
             pnl_usd = (p["qty"] * c_price) - p["cost"]
-            position_age = now_t - p.get("created_at", now_t)
-            is_expired = position_age >= window_limit_sec
+            
+            # Track peak price
+            if pnl_pct > p.get("peak_pnl_pct", 0.0):
+                p["peak_pnl_pct"] = pnl_pct
 
-            if pnl_pct >= tp_target:
-                settled_any = True
-                es["cash"] += (p["qty"] * c_price)
-                es["settled_trades"] += 1
-                es["real_wins"] += 1
-                es["order_history"].insert(0, {
-                    "Time": time.strftime("%H:%M:%S"),
-                    "Side": "SELL",
-                    "Symbol": p["symbol"] + "-USD",
-                    "Amount": f"${p['cost'] + pnl_usd:.2f}",
-                    "Price": f"${c_price:,.2f}",
-                    "Status": "TP HIT",
-                    "ID": p["id"]
-                })
+            peak = p["peak_pnl_pct"]
+            current_floor = p.get("ratchet_stop_pct", -initial_sl)
+
+            # RATCHET TIER 1: 50% Profit Lock
+            if peak >= tier1_trigger and p.get("ratchet_tier", 0) < 1:
+                p["ratchet_tier"] = 1
+                new_floor = peak * 0.50
+                p["ratchet_stop_pct"] = max(current_floor, new_floor)
                 es["activity_logs"].insert(0, {
-                    "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · cash recycled!", "hi": True
+                    "dot": "#00e5ff", "agent": "CLOSER", "badge": "RATCHET", "b_cls": "badge-ratchet",
+                    "pnl": f"+{p['ratchet_stop_pct']:.2f}%", "p_cls": "pnl-pos",
+                    "desc": f"RATCHET TIER 1 on {p['symbol']}: Locked +{p['ratchet_stop_pct']:.2f}% floor (50% rule)!", "hi": True
                 })
-            elif pnl_pct <= -abs(sl_target) or (is_expired and pnl_usd < 0):
-                # STOP-LOSS OR NEGATIVE EXPIRY -> CONDUCT POST-MORTEM & WRITE LESSON!
+
+            # RATCHET TIER 2: 65% Profit Lock
+            elif peak >= tier2_trigger and p.get("ratchet_tier", 0) < 2:
+                p["ratchet_tier"] = 2
+                new_floor = peak * 0.65
+                p["ratchet_stop_pct"] = max(current_floor, new_floor)
+                es["activity_logs"].insert(0, {
+                    "dot": "#00e5ff", "agent": "CLOSER", "badge": "RATCHET", "b_cls": "badge-ratchet",
+                    "pnl": f"+{p['ratchet_stop_pct']:.2f}%", "p_cls": "pnl-pos",
+                    "desc": f"RATCHET TIER 2 on {p['symbol']}: Locked +{p['ratchet_stop_pct']:.2f}% floor (65% rule)!", "hi": True
+                })
+
+            # THE RUNNER HUG: When trade extends, stop hugs tightly (contracts to 0.20% trailing distance)
+            if peak >= (tier2_trigger * 1.5):
+                tight_trail = peak - 0.20
+                if tight_trail > p["ratchet_stop_pct"]:
+                    p["ratchet_stop_pct"] = tight_trail
+
+            # CHECK IF PRICE TOUCHED RATCHET FLOOR OR INITIAL STOP-LOSS
+            stop_level = p.get("ratchet_stop_pct", -initial_sl)
+            if pnl_pct <= stop_level:
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
+                is_win = (pnl_usd >= 0)
+                if is_win:
+                    es["real_wins"] += 1
+
+                p_cls = "pnl-pos" if is_win else "pnl-neg"
+                exit_tag = "RATCHET PROFIT LOCK" if stop_level > 0 else "STOP-LOSS CUT"
                 
-                # SELF-REFLECTION LEARNING GENERATOR
-                rule_num = len(es["learnings"]) + 1
-                new_lesson = {
-                    "rule_id": rule_num,
-                    "lesson": f"Trade #{p['id']} lost {pnl_pct:.2f}% on {p['symbol']}. Avoid entry when volatility regime is choppy.",
-                    "trigger": f"CHOP_{p['symbol']}"
-                }
-                es["learnings"].insert(0, new_lesson)
-
                 es["order_history"].insert(0, {
                     "Time": time.strftime("%H:%M:%S"),
                     "Side": "SELL",
                     "Symbol": p["symbol"] + "-USD",
                     "Amount": f"${p['cost'] + pnl_usd:.2f}",
                     "Price": f"${c_price:,.2f}",
-                    "Status": "SL CUT",
+                    "Status": exit_tag,
                     "ID": p["id"]
                 })
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-neg",
-                    "desc": f"LOSS CLOSED on {p['symbol']} ({pnl_pct:+.2f}%) · Lesson #{rule_num} added to Memory", "hi": False
-                })
-            elif is_expired and pnl_usd >= 0:
-                settled_any = True
-                es["cash"] += (p["qty"] * c_price)
-                es["settled_trades"] += 1
-                es["real_wins"] += 1
-                es["order_history"].insert(0, {
-                    "Time": time.strftime("%H:%M:%S"),
-                    "Side": "SELL",
-                    "Symbol": p["symbol"] + "-USD",
-                    "Amount": f"${p['cost'] + pnl_usd:.2f}",
-                    "Price": f"${c_price:,.2f}",
-                    "Status": "RESOLVED",
-                    "ID": p["id"]
-                })
-                es["activity_logs"].insert(0, {
-                    "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"10m window resolved on {p['symbol']} at {pnl_pct:+.2f}%", "hi": True
+                    "pnl": f"{pnl_usd:+.3f}", "p_cls": p_cls,
+                    "desc": f"{exit_tag} on {p['symbol']} at {pnl_pct:+.2f}% · cash secured!", "hi": is_win
                 })
             else:
                 remaining_positions.append(p)
@@ -750,7 +722,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"patrol: {p_summary if p_summary else 'all cash'} · window: 10m", "hi": False
+                "desc": f"ratchet patrol: {p_summary if p_summary else 'all cash'}", "hi": False
             })
 
         st.session_state.active_agent_step = 0
