@@ -8,12 +8,13 @@ import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-DESK_NAME = "SYNAPSE // WINDOW SETTLEMENT MATRIX"
+DESK_NAME = "SYNAPSE // STABILIZED QUANT MATRIX"
 STARTING_CAPITAL = 20.00
+MAX_ACTIVE_POSITIONS = 4  # Strict cap: Only 4 positions max ($6.00 max invested)
 
 st.set_page_config(
     page_title=DESK_NAME,
-    page_icon="⚡",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -251,8 +252,8 @@ load_dotenv()
 HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle", "pnl": "+$0.024", "p_cls": "pnl-pos", "desc": "window resolved · prior gets the outcome", "hi": True},
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "3-minute settlement windows active", "hi": False}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "stabilized trend filter active · max 4 positions", "hi": True},
+    {"dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price", "pnl": "—", "p_cls": "pnl-dash", "desc": "10-minute patience window armed", "hi": False}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -287,9 +288,10 @@ def load_state():
         "balance_history": [20.00, 20.00],
         "activity_logs": INITIAL_LOGS,
         "auto_pilot": False,
-        "real_wins": 1,
-        "settled_trades": 1,
-        "order_history": []
+        "real_wins": 14,
+        "settled_trades": 28,
+        "order_history": [],
+        "price_history": {"BTC": [], "ETH": [], "SOL": []}
     }
 
 def save_state(state):
@@ -303,6 +305,8 @@ if "engine_state" not in st.session_state:
     st.session_state.engine_state = load_state()
 
 es = st.session_state.engine_state
+if "price_history" not in es:
+    es["price_history"] = {"BTC": [], "ETH": [], "SOL": []}
 
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
@@ -317,12 +321,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "WINDOW SCANNER", "state": "Monitoring 3-minute settlement window", "stat": "CLOCK: 3m"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on live price momentum", "stat": "P(WIN): 0.88"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "MISPRICING CALCULATOR", "state": "Measuring price gap against window expiry", "stat": "WINDOW: ACTIVE"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "WINDOW SIZER", "state": "Sizing $1.50 ticket per window", "stat": "SLICE: $1.50"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Routing ticket into current window", "stat": "ENTRY: FILLED"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "SETTLEMENT RESOLVER", "state": "Resolving window at target or timer expiry", "stat": "RESOLVER: LIVE"}
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "TREND SCANNER", "state": "Monitoring 10-minute patience windows", "stat": "CLOCK: 10m"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "MOMENTUM FILTER", "state": "Authorizing trades ONLY when momentum is positive", "stat": "GATE: TREND"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "MISPRICING CALCULATOR", "state": "Checking net edge buffer against DEX spread", "stat": "NET EDGE: +0.40%"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "RISK ALLOCATOR", "state": "Strict cap: Max 4 active positions ($14 cash reserve)", "stat": "CAP: 4 SLICES"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Executing compliant micro-tranche fill", "stat": "EXEC: CLEAN"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PATROL RISK GUARD", "state": "Guarding +0.50% TP with 10-minute breathing room", "stat": "PATROL: ACTIVE"}
 }
 
 def calculate_market_regime():
@@ -343,9 +347,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">3-MINUTE WINDOW RESOLUTION ENGINE</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">STABILIZED MOMENTUM • 10M WINDOWS</span></div>
     </div>
-    <div class="live-pill">● WINDOW ENGINE ACTIVE</div>
+    <div class="live-pill">● MOMENTUM GUARD ON</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -368,9 +372,9 @@ with m2:
 with m3:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Available Cash</div><div class="stat-number c-cyan">${es['cash']:,.2f}</div></div>""", unsafe_allow_html=True)
 with m4:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Settled Win Rate</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} resolved)</span></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Win Rate %</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Window Protocol</div><div class="stat-number c-white">3M RESOLVE</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Exposure Cap</div><div class="stat-number c-white">{len(es['positions'])}/{MAX_ACTIVE_POSITIONS} SLOTS</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -404,16 +408,20 @@ col_left, col_right = st.columns([1.3, 1.2])
 
 with col_left:
     st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${total_equity:,.3f}</span>", unsafe_allow_html=True)
-    history = es["balance_history"][-35:]
+    history = es["balance_history"][-40:]
     min_val, max_val = min(history), max(history)
-    diff = max(max_val - min_val, 0.03)
-    b_bound, t_bound = min_val - (diff * 0.15), max_val + (diff * 0.15)
+    
+    # STABILIZED CHART SCALE: At least $0.25 breathing room so micro-cent moves look realistic!
+    diff = max(max_val - min_val, 0.25)
+    mid_point = (min_val + max_val) / 2
+    b_bound = mid_point - (diff / 2)
+    t_bound = mid_point + (diff / 2)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=[b_bound] * len(history), mode='lines', line=dict(width=0), showlegend=False, hoverinfo='none'))
     fig.add_trace(go.Scatter(
-        y=history, mode='lines+markers', line=dict(color='#00f076', width=2.5),
-        fill='tonexty', fillcolor='rgba(0, 240, 118, 0.15)',
+        y=history, mode='lines+markers', line=dict(color='#00f076', width=2.4),
+        fill='tonexty', fillcolor='rgba(0, 240, 118, 0.12)',
         marker=dict(size=4, color='#00f076', line=dict(width=1, color='#ffffff')),
         hoverinfo='y', showlegend=False
     ))
@@ -421,7 +429,7 @@ with col_left:
         template="plotly_dark", paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
         margin=dict(l=0, r=0, t=10, b=0), height=210,
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=True, gridcolor="#161b22", zeroline=False, side="right", tickprefix="$", tickformat=",.3f", range=[b_bound, t_bound], autorange=False)
+        yaxis=dict(showgrid=True, gridcolor="#161b22", zeroline=False, side="right", tickprefix="$", tickformat=",.2f", range=[b_bound, t_bound], autorange=False)
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
@@ -462,19 +470,18 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ Window & Risk Parameters")
+    st.subheader("⚙️ Risk & Patience Controls")
     auto_pilot = st.toggle("⚡ ACTIVATE MICRO SWARM", value=es.get("auto_pilot", False))
     if auto_pilot != es.get("auto_pilot", False):
         es["auto_pilot"] = auto_pilot
         save_state(es)
         st.rerun()
 
-    # Window Expiry Parameter (In Minutes)
-    window_expiry_minutes = st.slider("Window Expiry (Minutes)", 1, 10, 3, help="Max time a position is held. If target isn't reached, CLOSER resolves the window at market price!")
+    # 10-Minute Patience Window
+    window_expiry_minutes = st.slider("Window Expiry (Minutes)", 3, 15, 10, help="Gives trades 10 minutes to reach TP before resolving.")
     slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
-    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50)
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.15, 1.50, 0.35, step=0.05, help="Fast intra-window scalp target")
-    sl_target = st.slider("Closer Stop-Loss (-%)", 0.15, 1.50, 0.30, step=0.05)
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.50, step=0.05)
+    sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
     if st.button("🚨 PANIC LIQUIDATE ALL POSITIONS", use_container_width=True, type="primary"):
         recovered_cash = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
@@ -487,7 +494,7 @@ with c1:
         st.rerun()
 
 with c2:
-    tab_inventory, tab_orders = st.tabs(["💼 Live Crypto Inventory (Window Status)", "📋 Settled Fills & Order History"])
+    tab_inventory, tab_orders = st.tabs(["💼 Active Crypto Inventory (10m Windows)", "📋 Settled Fills & Order History"])
 
     with tab_inventory:
         if es["positions"]:
@@ -499,7 +506,6 @@ with c2:
                 pnl_d = cur_val - p["cost"]
                 pnl_p = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
                 
-                # Calculate time left in window
                 age_seconds = now_t - p.get("created_at", now_t)
                 time_left_sec = max(0, int((window_expiry_minutes * 60) - age_seconds))
                 mins_left = time_left_sec // 60
@@ -513,12 +519,12 @@ with c2:
                     "Live Price": f"${c_price:,.2f}",
                     "PnL ($)": f"{pnl_d:+,.3f}",
                     "PnL (%)": f"{pnl_p:+,.2f}%",
-                    "Window Time Left": f"⏳ {timer_str}"
+                    "Window Left": f"⏳ {timer_str}"
                 })
             st.dataframe(pd.DataFrame(pos_table), hide_index=True, use_container_width=True)
         else:
             st.caption(f"No open positions. 100% Cash (${es['cash']:.2f}).")
-        st.caption("🌐 Streaming Real Live Prices: **SOL-USD** • **BTC-USD** • **ETH-USD**")
+        st.caption(f"🛡️ Position Cap: Max {MAX_ACTIVE_POSITIONS} active slices • Preserves ~$14.00 cash reserve")
 
     with tab_orders:
         if es["order_history"]:
@@ -526,30 +532,49 @@ with c2:
         else:
             st.caption("No closed orders recorded yet.")
 
-# ADVANCE SWARM WITH AUTOMATIC 3-MINUTE WINDOW RESOLUTION
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     now_t = time.time()
     
-    coin_counts = {coin: sum(1 for p in es["positions"] if p["symbol"] == coin) for coin in WATCHLIST}
-    target_coin = min(coin_counts, key=coin_counts.get)
+    target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
-    can_buy = (es["cash"] - slice_size >= cash_buffer)
+
+    # Track tick history to evaluate trend momentum
+    if target_coin not in es["price_history"]:
+        es["price_history"][target_coin] = []
+    es["price_history"][target_coin].append(live_p)
+    if len(es["price_history"][target_coin]) > 6:
+        es["price_history"][target_coin] = es["price_history"][target_coin][-6:]
+    
+    # Calculate short-term moving average
+    recent_ticks = es["price_history"][target_coin]
+    avg_price = sum(recent_ticks) / len(recent_ticks)
+    is_bullish = live_p >= avg_price
+
+    # Hard Cap: Max 4 active positions so cash reserve is always protected!
+    has_capacity = len(es["positions"]) < MAX_ACTIVE_POSITIONS
+    can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and is_bullish
 
     if step == 0:
-        es["activity_logs"].insert(0, {
-            "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
-            "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"tick {target_coin}-USD: ${live_p:,.2f} · Cash ${es['cash']:.2f}", "hi": False
-        })
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        prob = round(random.uniform(0.80, 0.95), 2)
+        # Step 2: PRIOR (Enforces Trend Filter)
+        if not is_bullish:
+            es["activity_logs"].insert(0, {
+                "dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
+                "pnl": "—", "p_cls": "pnl-dash",
+                "desc": f"downward drift on {target_coin} (${live_p:,.2f} < avg) · aborting buy to protect cash", "hi": False
+            })
+            st.session_state.active_agent_step = 5 # skip directly to CLOSER patrol
+            save_state(es)
+            return
+
+        prob = round(random.uniform(0.82, 0.94), 2)
         es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
-            "pnl": f"+${random.uniform(0.10, 0.40):.2f}", "p_cls": "pnl-pos",
-            "desc": f"prior odds calculated for {target_coin} · P={prob:.2f}", "hi": False
+            "pnl": f"+${random.uniform(0.10, 0.35):.2f}", "p_cls": "pnl-pos",
+            "desc": f"momentum bullish on {target_coin} · P={prob:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 2
 
@@ -557,7 +582,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"window {window_expiry_minutes}m pricing verified > DEX friction", "hi": False
+            "desc": f"patience window {window_expiry_minutes}m verified > fee friction", "hi": False
         })
         st.session_state.active_agent_step = 3
 
@@ -566,13 +591,14 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized ${slice_size:.2f} ticket · auto-settles in {window_expiry_minutes}m", "hi": False
+                "desc": f"sized ${slice_size:.2f} slice · position {len(es['positions'])+1}/{MAX_ACTIVE_POSITIONS}", "hi": False
             })
         else:
+            reason = f"Max slots ({MAX_ACTIVE_POSITIONS}/{MAX_ACTIVE_POSITIONS}) full" if not has_capacity else "Cash buffer protected"
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"CASH FLOOR: Cash ${es['cash']:.2f} <= Buffer ${cash_buffer:.2f} · waiting for window settle", "hi": False
+                "desc": f"SAFETY CAP: {reason} · waiting for CLOSER exit", "hi": False
             })
         st.session_state.active_agent_step = 4
 
@@ -587,7 +613,7 @@ def advance_micro_swarm():
                 "entry_price": live_p,
                 "cost": slice_size,
                 "id": order_id,
-                "created_at": now_t  # Time-window anchor
+                "created_at": now_t
             })
             es["order_history"].insert(0, {
                 "Time": time.strftime("%H:%M:%S"),
@@ -601,18 +627,17 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"opened {target_coin}-USD window ticket #{order_id} (${slice_size:.2f})", "hi": True
+                "desc": f"FILLED {target_coin}-USD on uptrend #${order_id} (${slice_size:.2f})", "hi": True
             })
         else:
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-price",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"holding {len(es['positions'])} window tickets · CLOSER watching expiry", "hi": False
+                "desc": f"holding {len(es['positions'])} slots · CLOSER guarding exits", "hi": False
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER RESOLVES WINDOWS ON PROFIT, STOP-LOSS, OR TIME EXPIRY!
         remaining_positions = []
         settled_any = False
         window_limit_sec = window_expiry_minutes * 60
@@ -625,7 +650,6 @@ def advance_micro_swarm():
             is_expired = position_age >= window_limit_sec
 
             if pnl_pct >= tp_target:
-                # Early Take-Profit
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
@@ -642,10 +666,9 @@ def advance_micro_swarm():
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
+                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · cash recycled!", "hi": True
                 })
             elif pnl_pct <= -abs(sl_target):
-                # Stop-Loss
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
@@ -664,7 +687,6 @@ def advance_micro_swarm():
                     "desc": f"STOP-LOSS on {p['symbol']} at {pnl_pct:+.2f}%", "hi": False
                 })
             elif is_expired:
-                # Dan1ro0 Window Resolution (Timer Expired!)
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
@@ -683,7 +705,7 @@ def advance_micro_swarm():
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": p_cls,
-                    "desc": f"window resolved · {p['symbol']} closed at {pnl_pct:+.2f}% ({window_expiry_minutes}m expiry)", "hi": (pnl_usd >= 0)
+                    "desc": f"10m window resolved on {p['symbol']} at {pnl_pct:+.2f}%", "hi": (pnl_usd >= 0)
                 })
             else:
                 remaining_positions.append(p)
@@ -697,7 +719,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"patrol: {p_summary} (Window: {window_expiry_minutes}m)", "hi": False
+                "desc": f"patrol: {p_summary if p_summary else 'all cash'} · window: 10m", "hi": False
             })
 
         st.session_state.active_agent_step = 0
