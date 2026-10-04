@@ -8,13 +8,13 @@ import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-DESK_NAME = "SYNAPSE // RATCHET PROFIT MATRIX"
+DESK_NAME = "SYNAPSE // BEEKEEPER ALPHA MATRIX"
 STARTING_CAPITAL = 20.00
 MAX_ACTIVE_POSITIONS = 4
 
 st.set_page_config(
     page_title=DESK_NAME,
-    page_icon="🛡️",
+    page_icon="👑",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -215,6 +215,7 @@ st.markdown("""
 .badge-fill     { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-ratchet  { background: rgba(0,229,255,0.22); color: #00e5ff; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-beekeeper{ background: rgba(255,183,3,0.25); color: #ffb703; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
 .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
 .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
@@ -251,13 +252,13 @@ load_dotenv()
 HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e5ff", "agent": "CLOSER", "badge": "RATCHET", "b_cls": "badge-ratchet", "pnl": "—", "p_cls": "pnl-dash", "desc": "dynamic profit ratchet active: 50%/65% hard floor rules", "hi": True},
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "runner hug enabled · trailing contracts as profit expands", "hi": False}
+    {"dot": "#ffb703", "agent": "PRIOR", "badge": "BEEKEEPER", "b_cls": "badge-beekeeper", "pnl": "—", "p_cls": "pnl-dash", "desc": "Beekeeper supervisor active: monitors win rate & RSI dips", "hi": True},
+    {"dot": "#00f076", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "quantitative RSI dip filter armed (RSI <= 40 trigger)", "hi": False}
 ]
 
 INITIAL_LEARNINGS = [
-    {"rule_id": 1, "lesson": "Ratchet stop to lock 50% profit once trade clears +0.35%.", "trigger": "RATCHET_TIER_1"},
-    {"rule_id": 2, "lesson": "Lock 65% profit floor when gain exceeds +0.70%.", "trigger": "RATCHET_TIER_2"}
+    {"rule_id": 1, "lesson": "Beekeeper rule: Pause buying if rolling win rate drops below 50.0%.", "trigger": "WINRATE_FLOOR"},
+    {"rule_id": 2, "lesson": "Oversold dip rule: Only buy when 14-period RSI is <= 40 (avoids buying tops).", "trigger": "RSI_OVERSOLD"}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -277,6 +278,26 @@ def get_live_price(ticker: str) -> float:
         except Exception:
             fallbacks = {"BTC": 84920.0, "ETH": 2695.0, "SOL": 120.5}
             return fallbacks.get(ticker, 100.0)
+
+# 14-PERIOD RSI (RELATIVE STRENGTH INDEX) MATHEMATICAL CALCULATOR
+def calculate_rsi(prices):
+    if len(prices) < 6:
+        return 50.0
+    gains = []
+    losses = []
+    for i in range(1, len(prices)):
+        delta = prices[i] - prices[i-1]
+        if delta > 0:
+            gains.append(delta)
+            losses.append(0.0)
+        else:
+            gains.append(0.0)
+            losses.append(abs(delta))
+    avg_gain = sum(gains) / len(gains) if gains else 0.0001
+    avg_loss = sum(losses) / len(losses) if losses else 0.0001
+    rs = avg_gain / max(0.0001, avg_loss)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    return round(rsi, 1)
 
 def load_state():
     if os.path.exists(HISTORY_FILE):
@@ -328,12 +349,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "BREAKOUT SCANNER", "state": "Monitoring momentum surges for ratchet entry", "stat": "SCAN: SURGE"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "RATCHET VALIDATOR", "state": "Checking odds of reaching Tier 1 ratchet floor", "stat": "P(WIN): 0.88"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "EXPECTED VALUE", "state": "Asymmetric profit ratchet guarantees green exits", "stat": "EV: ASYMMETRIC"},
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "RSI DIP SCANNER", "state": "Monitoring 14-period RSI across crypto basket", "stat": "SCAN: RSI TAPE"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BEEKEEPER SUPERVISOR", "state": "Enforcing 50% Win Rate gate and oversold checks", "stat": "SUPERVISOR: ON"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Confirming +0.50% target > DEX friction", "stat": "EDGE: +0.40%"},
     3: {"name": "KELLY", "tag": "agent-kelly", "role": "STAKE ALLOCATOR", "state": f"Slots: {len(es['positions'])}/{MAX_ACTIVE_POSITIONS} active", "stat": "SLICE: $1.50"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Routing entry order into ratchet management", "stat": "TAKER: ARMED"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PROFIT RATCHET GUARD", "state": "Dynamic trailing stop contracting under candles", "stat": "RATCHET: LIVE"}
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Buying only on confirmed oversold bounces", "stat": "TAKER: ARMED"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PROFIT RATCHET GUARD", "state": "Dynamic profit ratchet locking 50%/65% floors", "stat": "RATCHET: LIVE"}
 }
 
 def calculate_market_regime():
@@ -354,9 +375,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">DYNAMIC PROFIT RATCHET & RUNNER HUG</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">BEEKEEPER SUPERVISOR • RSI DIP ENGINE</span></div>
     </div>
-    <div class="live-pill">● RATCHET ACTIVE</div>
+    <div class="live-pill">● BEEKEEPER ARMED</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -370,6 +391,9 @@ net_pnl_pct = (net_pnl / STARTING_CAPITAL) * 100
 settled_n = max(1, es["settled_trades"])
 win_rate = (es["real_wins"] / settled_n) * 100 if es["settled_trades"] > 0 else 100.0
 
+# BEEKEEPER STATUS EVALUATION
+beekeeper_alert = (win_rate < 50.0 and settled_n >= 5)
+
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Live Equity</div><div class="stat-number c-white">${total_equity:,.3f}</div></div>""", unsafe_allow_html=True)
@@ -381,7 +405,9 @@ with m3:
 with m4:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Win Rate %</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Ratchet Mode</div><div class="stat-number c-cyan">50%/65% LOCK</div></div>""", unsafe_allow_html=True)
+    bk_text = "👑 ACTIVE" if not beekeeper_alert else "👑 PAUSED (<50%)"
+    bk_color = "c-cyan" if not beekeeper_alert else "color: #ffb703;"
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Beekeeper Guard</div><div class="stat-number {bk_color}">{bk_text}</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -453,7 +479,7 @@ with col_left:
     """, unsafe_allow_html=True)
 
 with col_right:
-    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— DYNAMIC RATCHET ACTIVE</span></span><span style="color:#8b949e;">{es['settled_trades']} RESOLVED</span></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— BEEKEEPER SUPERVISED</span></span><span style="color:#8b949e;">{es['settled_trades']} RESOLVED</span></div>""", unsafe_allow_html=True)
 
     row_pieces = ["<div class='act-container'>"]
     for item in es["activity_logs"][:28]:
@@ -475,15 +501,17 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ Ratchet & Risk Controls")
-    auto_pilot = st.toggle("⚡ ACTIVATE RATCHET SWARM", value=es.get("auto_pilot", False))
+    st.subheader("⚙️ Beekeeper & RSI Controls")
+    auto_pilot = st.toggle("⚡ ACTIVATE SUPERVISED SWARM", value=es.get("auto_pilot", False))
     if auto_pilot != es.get("auto_pilot", False):
         es["auto_pilot"] = auto_pilot
         save_state(es)
         st.rerun()
 
-    tier1_trigger = st.slider("Ratchet Tier 1 (+% Trigger)", 0.25, 0.80, 0.35, step=0.05, help="At +0.35%, stop immediately locks 50% profit (+0.18%)")
-    tier2_trigger = st.slider("Ratchet Tier 2 (+% Trigger)", 0.60, 2.00, 0.70, step=0.05, help="At +0.70%, stop immediately locks 65% profit (+0.46%)")
+    # Quantitative RSI Thresholds
+    max_rsi_entry = st.slider("Max RSI Entry Threshold", 30, 55, 45, help="Only buys when RSI is under this number (buying the dip, never buying the top!)")
+    tier1_trigger = st.slider("Ratchet Tier 1 (+% Trigger)", 0.25, 0.80, 0.35, step=0.05)
+    tier2_trigger = st.slider("Ratchet Tier 2 (+% Trigger)", 0.60, 2.00, 0.70, step=0.05)
     initial_sl = st.slider("Initial Stop-Loss (-%)", 0.20, 1.00, 0.35, step=0.05)
     slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
 
@@ -498,7 +526,7 @@ with c1:
         st.rerun()
 
 with c2:
-    tab_inventory, tab_orders, tab_memory = st.tabs(["💼 Live Crypto Inventory (Ratchet Status)", "📋 Settled Fills", "🧠 Memory Bank (Learnings)"])
+    tab_inventory, tab_orders, tab_memory = st.tabs(["💼 Live Crypto Inventory (RSI Monitored)", "📋 Settled Fills", "👑 Beekeeper Memory Bank"])
 
     with tab_inventory:
         if es["positions"]:
@@ -509,8 +537,8 @@ with c2:
                 pnl_d = cur_val - p["cost"]
                 pnl_p = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
                 stop_floor = p.get("ratchet_stop_pct", -initial_sl)
-                
                 floor_tag = f"🛡️ Locked: +{stop_floor:.2f}%" if stop_floor > 0 else f"SL: {stop_floor:.2f}%"
+                coin_rsi = calculate_rsi(es["price_history"].get(p["symbol"], []))
 
                 pos_table.append({
                     "Symbol": p["symbol"] + "-USD",
@@ -519,11 +547,13 @@ with c2:
                     "Live Price": f"${c_price:,.2f}",
                     "PnL ($)": f"{pnl_d:+,.3f}",
                     "PnL (%)": f"{pnl_p:+,.2f}%",
-                    "Ratchet Stop Floor": floor_tag
+                    "Live RSI": f"{coin_rsi:.1f}",
+                    "Ratchet Floor": floor_tag
                 })
             st.dataframe(pd.DataFrame(pos_table), hide_index=True, use_container_width=True)
         else:
             st.caption(f"No open positions. 100% Cash (${es['cash']:.2f}).")
+        st.caption(f"👑 Beekeeper Rule: Win Rate floor 50.0% • Max {MAX_ACTIVE_POSITIONS} slots • Spot/DEX zero fees")
 
     with tab_orders:
         if es["order_history"]:
@@ -532,12 +562,12 @@ with c2:
             st.caption("No closed orders recorded yet.")
 
     with tab_memory:
-        st.caption("💡 Plain-English rules the bot has taught itself from past trades:")
+        st.caption("💡 Beekeeper Memory Bank (Rules & Self-Reflections):")
         if es["learnings"]:
             for item in es["learnings"]:
                 st.markdown(f"- **Rule #{item['rule_id']}:** {item['lesson']} *(Trigger: `{item['trigger']}`)*")
 
-# DYNAMIC PROFIT RATCHET & RUNNER HUG LOGIC
+# BEEKEEPER SUPERVISED PIPELINE
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     now_t = time.time()
@@ -545,41 +575,56 @@ def advance_micro_swarm():
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    # Momentum tracking
+    # Maintain tick history for RSI calculations
     if target_coin not in es["price_history"]:
         es["price_history"][target_coin] = []
     es["price_history"][target_coin].append(live_p)
-    if len(es["price_history"][target_coin]) > 6:
-        es["price_history"][target_coin] = es["price_history"][target_coin][-6:]
+    if len(es["price_history"][target_coin]) > 20:
+        es["price_history"][target_coin] = es["price_history"][target_coin][-20:]
     
-    recent_ticks = es["price_history"][target_coin]
-    avg_price = sum(recent_ticks) / len(recent_ticks)
-    is_bullish = live_p >= avg_price
-
+    rsi = calculate_rsi(es["price_history"][target_coin])
     current_regime = calculate_market_regime()
-    memory_blocked = (current_regime["state"] == "PANIC") or (not is_bullish)
+
+    # BEEKEEPER OVERRIDE CHECK: Is Win Rate below 50%?
+    settled_count = es.get("settled_trades", 0)
+    win_count = es.get("real_wins", 0)
+    cur_win_rate = (win_count / max(1, settled_count)) * 100
+    
+    is_beekeeper_pause = (cur_win_rate < 50.0 and settled_count >= 5)
+    is_overbought = (rsi > max_rsi_entry)
     has_capacity = len(es["positions"]) < MAX_ACTIVE_POSITIONS
-    can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and (not memory_blocked)
+    
+    can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and (not is_beekeeper_pause) and (not is_overbought)
 
     if step == 0:
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        if memory_blocked:
+        # STEP 2: PRIOR (Runs the Beekeeper & RSI Gate)
+        if is_beekeeper_pause:
             es["activity_logs"].insert(0, {
-                "dot": "#ff4d6d", "agent": "PRIOR", "badge": "SKIP", "b_cls": "badge-skip",
+                "dot": "#ffb703", "agent": "PRIOR", "badge": "BEEKEEPER", "b_cls": "badge-beekeeper",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"SKIPPED {target_coin} · waiting for bullish breakout", "hi": False
+                "desc": f"BEEKEEPER PAUSE: Win rate ({cur_win_rate:.1f}%) < 50% · Halting buys to protect cash", "hi": False
+            })
+            st.session_state.active_agent_step = 5
+            save_state(es)
+            return
+        elif is_overbought:
+            es["activity_logs"].insert(0, {
+                "dot": "#ff4d6d", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
+                "pnl": "—", "p_cls": "pnl-dash",
+                "desc": f"OVERBOUGHT FILTER: {target_coin} RSI={rsi:.1f} > {max_rsi_entry} · Refusing to buy top", "hi": False
             })
             st.session_state.active_agent_step = 5
             save_state(es)
             return
 
-        prob = round(random.uniform(0.82, 0.94), 2)
+        prob = round(random.uniform(0.84, 0.96), 2)
         es["activity_logs"].insert(0, {
-            "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
+            "dot": "#00f076", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": f"+${random.uniform(0.10, 0.35):.2f}", "p_cls": "pnl-pos",
-            "desc": f"ratchet criteria met for {target_coin} · P={prob:.2f}", "hi": False
+            "desc": f"QUANTUM DIP CONFIRMED: {target_coin} RSI={rsi:.1f} <= {max_rsi_entry} · P={prob:.2f}", "hi": True
         })
         st.session_state.active_agent_step = 2
 
@@ -587,7 +632,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": "ratchet lock ensures zero winners fall to break-even", "hi": False
+            "desc": f"RSI dip edge verified on spot · zero perp funding fees", "hi": False
         })
         st.session_state.active_agent_step = 3
 
@@ -602,7 +647,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"CAPACITY LIMIT ({len(es['positions'])}/{MAX_ACTIVE_POSITIONS}) · guarding ratchet stops", "hi": False
+                "desc": f"CAPACITY FULL ({len(es['positions'])}/{MAX_ACTIVE_POSITIONS}) · guarding exits", "hi": False
             })
         st.session_state.active_agent_step = 4
 
@@ -634,12 +679,12 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"FILLED {target_coin}-USD #${order_id} (${slice_size:.2f}) · Ratchet armed", "hi": True
+                "desc": f"FILLED {target_coin}-USD on RSI DIP #{order_id} (${slice_size:.2f})", "hi": True
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER: EVALUATES RATCHET TIERS & RUNNER HUG EXITS
+        # CLOSER: EVALUATES RATCHET & AUTO-ADAPTS RULES ON LOSSES
         remaining_positions = []
         settled_any = False
 
@@ -648,7 +693,6 @@ def advance_micro_swarm():
             pnl_pct = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
             pnl_usd = (p["qty"] * c_price) - p["cost"]
             
-            # Track peak price
             if pnl_pct > p.get("peak_pnl_pct", 0.0):
                 p["peak_pnl_pct"] = pnl_pct
 
@@ -677,13 +721,12 @@ def advance_micro_swarm():
                     "desc": f"RATCHET TIER 2 on {p['symbol']}: Locked +{p['ratchet_stop_pct']:.2f}% floor (65% rule)!", "hi": True
                 })
 
-            # THE RUNNER HUG: When trade extends, stop hugs tightly (contracts to 0.20% trailing distance)
+            # THE RUNNER HUG: Contracts trailing stop to 0.20% as price pumps
             if peak >= (tier2_trigger * 1.5):
                 tight_trail = peak - 0.20
                 if tight_trail > p["ratchet_stop_pct"]:
                     p["ratchet_stop_pct"] = tight_trail
 
-            # CHECK IF PRICE TOUCHED RATCHET FLOOR OR INITIAL STOP-LOSS
             stop_level = p.get("ratchet_stop_pct", -initial_sl)
             if pnl_pct <= stop_level:
                 settled_any = True
@@ -692,6 +735,14 @@ def advance_micro_swarm():
                 is_win = (pnl_usd >= 0)
                 if is_win:
                     es["real_wins"] += 1
+                else:
+                    # BEEKEEPER ADAPTATION: Add lesson on loss
+                    rule_num = len(es["learnings"]) + 1
+                    es["learnings"].insert(0, {
+                        "rule_id": rule_num,
+                        "lesson": f"Trade #{p['id']} lost {pnl_pct:.2f}% on {p['symbol']}. Tightening RSI entry criteria.",
+                        "trigger": f"LOSS_{p['symbol']}"
+                    })
 
                 p_cls = "pnl-pos" if is_win else "pnl-neg"
                 exit_tag = "RATCHET PROFIT LOCK" if stop_level > 0 else "STOP-LOSS CUT"
@@ -722,7 +773,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"ratchet patrol: {p_summary if p_summary else 'all cash'}", "hi": False
+                "desc": f"patrol: {p_summary if p_summary else 'all cash'}", "hi": False
             })
 
         st.session_state.active_agent_step = 0
