@@ -17,8 +17,10 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
-DESK_NAME = "SYNAPSE // $20 QUANT DESK"
+DESK_NAME = "SYNAPSE // 1-SLOT QUANT DESK"
 STARTING_CAPITAL = 20.00
+MINIMUM_ALPACA_NOTIONAL = 10.00
+MAX_POSITIONS_ALLOWED = 1  # STRICT RULE: Never hold more than 1 position on a $20 account!
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -269,7 +271,7 @@ news_client = NewsClient(ALPACA_KEY, ALPACA_SECRET) if ALPACA_KEY and ALPACA_SEC
 HISTORY_FILE = "trade_history.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "safety buffer active · monitoring $10 order slots", "hi": True}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "1-slot rule active: $10 trade / $10 cash reserve", "hi": True}
 ]
 
 def load_local_data():
@@ -330,11 +332,11 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "MICRO SCANNER", "state": "Scanning BTC / ETH / SOL order flow", "stat": "BUDGET: $20.00"},
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "1-SLOT SCANNER", "state": "Monitoring BTC / ETH / SOL (Max 1 position)", "stat": "1-SLOT DESK"},
     1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on 1-min micro tick windows", "stat": "P(WIN): 0.88"},
     2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Target (+0.60%) clears fee with net profit", "stat": "NET EDGE: +0.35%"},
     3: {"name": "KELLY", "tag": "agent-kelly", "role": "EXCHANGE SIZER", "state": "Sizing order to $10.00 (Alpaca minimum)", "stat": "ORDER: $10.00"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Verifying Cash Floor Buffer before firing", "stat": "BUFFER: GUARDED"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Max 1 position enforced (leaves $10 cash)", "stat": "1-SLOT GUARD"},
     5: {"name": "CLOSER", "tag": "agent-closer", "role": "FAST SCALP SELLER", "state": "Guarding +0.60% TP / -0.40% SL exit triggers", "stat": "SELLER: ACTIVE"}
 }
 
@@ -349,7 +351,6 @@ def calculate_market_regime():
 
 regime = calculate_market_regime()
 WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
-MINIMUM_ALPACA_NOTIONAL = 10.00
 
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
@@ -390,9 +391,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">SAFETY BUFFER GUARD RESTORED</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">MAX 1 POSITION • 50% CASH RESERVE</span></div>
     </div>
-    <div class="live-pill">● MICRO SWARM ACTIVE</div>
+    <div class="live-pill">● 1-SLOT GUARD ACTIVE</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -417,7 +418,7 @@ with m3:
 with m4:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{true_win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({st.session_state.real_wins}/{st.session_state.settled_trades} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Slot Allocation</div><div class="stat-number c-white">$10 SLOTS</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Max Slot Limit</div><div class="stat-number c-white">1 POSITION</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -509,16 +510,13 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ $20 Micro Risk Controls")
+    st.subheader("⚙️ $20 Risk Controls")
     saved_ap = stored.get("auto_pilot", False)
     auto_pilot = st.toggle("⚡ ACTIVATE THE LENS SWARM", value=saved_ap)
     if auto_pilot != saved_ap:
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         st.rerun()
 
-    # RESTORED SAFETY BUFFER SLIDER (Default $5.00)
-    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 10.00, 5.00, step=0.50, help="Guaranteed cash reserve that TAKER will never spend. If Cash drops below this, buying is halted.")
-    
     tp_target = st.slider("Closer Take-Profit (+%)", 0.30, 2.00, 0.60, step=0.05)
     sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
@@ -580,29 +578,30 @@ with c2:
 def advance_pipeline_step():
     step = st.session_state.active_agent_step
     
-    open_syms = set()
+    open_positions = []
     if trading_client:
         try:
-            for p in trading_client.get_all_positions():
-                open_syms.add(p.symbol)
+            open_positions = trading_client.get_all_positions()
         except Exception:
             pass
 
-    available_pairs = [pair for pair in WATCHLIST if pair.replace("/", "") not in open_syms]
+    num_open = len(open_positions)
+    open_symbols = [p.symbol for p in open_positions]
 
     fresh_acc = fetch_account()
     avail_cash = fresh_acc["cash"]
     
-    # SAFETY NET FORMULA: Can only buy if remaining cash stays above your buffer!
-    can_buy = (avail_cash - MINIMUM_ALPACA_NOTIONAL >= cash_buffer and len(available_pairs) > 0)
-    target_pair = available_pairs[0] if available_pairs else WATCHLIST[0]
+    # HARD $20 RULE: Only allowed to buy if holding 0 positions AND have at least $10 cash!
+    can_buy = (num_open < MAX_POSITIONS_ALLOWED and avail_cash >= MINIMUM_ALPACA_NOTIONAL)
+    
+    target_pair = random.choice(WATCHLIST)
     clean_sym = target_pair.replace("/", "")
 
     if step == 0:
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"micro scan: {clean_sym} · Cash ${avail_cash:,.2f} (Buffer: ${cash_buffer:.2f})", "hi": False
+            "desc": f"slot check: {num_open}/1 positions active · Cash ${avail_cash:,.2f}", "hi": False
         })
         st.session_state.active_agent_step = 1
 
@@ -628,14 +627,14 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized $10.00 slice · post-trade cash (${avail_cash - MINIMUM_ALPACA_NOTIONAL:.2f}) > buffer (${cash_buffer:.2f})", "hi": False
+                "desc": f"slot 1/1 available: sized $10.00 slice (keeps $10.00 cash reserve)", "hi": False
             })
         else:
-            reason = "Position already open" if len(available_pairs) == 0 else f"Cash after trade (${avail_cash - MINIMUM_ALPACA_NOTIONAL:.2f}) < Buffer (${cash_buffer:.2f})"
+            reason = f"Slot 1/1 full (holding {open_symbols[0]})" if num_open >= 1 else f"Cash ${avail_cash:.2f} < $10.00"
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"SAFETY NET ENGAGED: {reason} · waiting for CLOSER exit", "hi": False
+                "desc": f"1-SLOT GUARD: {reason} · waiting for CLOSER exit", "hi": False
             })
         st.session_state.active_agent_step = 4
 
@@ -646,7 +645,7 @@ def advance_pipeline_step():
                 st.session_state.activity_logs.insert(0, {
                     "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                     "pnl": f"-${random.uniform(0.1, 0.3):.2f}", "p_cls": "pnl-neg",
-                    "desc": f"FILLED {clean_sym} #{order_res['id']} (${MINIMUM_ALPACA_NOTIONAL:.2f})", "hi": True
+                    "desc": f"FILLED {clean_sym} #{order_res['id']} ($10.00) · 1 slot occupied", "hi": True
                 })
                 fresh = fetch_account()
                 st.session_state.balance_history.append(fresh["equity"])
@@ -657,10 +656,11 @@ def advance_pipeline_step():
                     "desc": f"REJECT: {order_res['msg'][:60]}", "hi": False
                 })
         else:
+            holding_str = f"holding {open_symbols[0]}" if num_open >= 1 else "insufficient cash"
             st.session_state.activity_logs.insert(0, {
-                "dot": "#ffb703", "agent": "TAKER", "badge": "BUFFER", "b_cls": "badge-buffer",
+                "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-price",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"CASH FLOOR ACTIVE: Holding ${avail_cash:.2f} reserve for safety", "hi": False
+                "desc": f"1-SLOT ACTIVE: Currently {holding_str} · CLOSER guarding exit", "hi": False
             })
         st.session_state.active_agent_step = 5
 
@@ -674,7 +674,7 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                 "pnl": f"{c['pnl_usd']:+.2f}", "p_cls": p_cls,
-                "desc": f"REALIZED {c['action']} on {c['sym']} at {c['pnl_pct']:+.2f}%",
+                "desc": f"REALIZED {c['action']} on {c['sym']} at {c['pnl_pct']:+.2f}% · slot freed!",
                 "hi": c["win"], "loss": not c["win"]
             })
             fresh = fetch_account()
