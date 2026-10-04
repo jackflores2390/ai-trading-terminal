@@ -8,13 +8,13 @@ import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-DESK_NAME = "SYNAPSE // STABILIZED QUANT MATRIX"
+DESK_NAME = "SYNAPSE // ADAPTIVE MEMORY MATRIX"
 STARTING_CAPITAL = 20.00
-MAX_ACTIVE_POSITIONS = 4  # Strict cap: Only 4 positions max ($6.00 max invested)
+MAX_ACTIVE_POSITIONS = 4
 
 st.set_page_config(
     page_title=DESK_NAME,
-    page_icon="🛡️",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -214,8 +214,7 @@ st.markdown("""
 .badge-size     { background: rgba(168,85,247,0.18); color: #c084fc; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-fill     { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-.badge-buffer   { background: rgba(255,183,3,0.18); color: #ffb703; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-.badge-patrol   { background: rgba(0,229,255,0.18); color: #00e5ff; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-skip     { background: rgba(239,68,68,0.25); color: #ff4d6d; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
 .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
 .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
@@ -252,8 +251,13 @@ load_dotenv()
 HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "stabilized trend filter active · max 4 positions", "hi": True},
-    {"dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price", "pnl": "—", "p_cls": "pnl-dash", "desc": "10-minute patience window armed", "hi": False}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "two-file memory system active (ledger + learnings)", "hi": True},
+    {"dot": "#f59e0b", "agent": "PRIOR", "badge": "RESEARCH", "b_cls": "badge-research", "pnl": "—", "p_cls": "pnl-dash", "desc": "prior cross-checks memory bank before entries", "hi": False}
+]
+
+INITIAL_LEARNINGS = [
+    {"rule_id": 1, "lesson": "Avoid buying into a PANIC regime (>50% panic probability).", "trigger": "PANIC_REGIME"},
+    {"rule_id": 2, "lesson": "Skip trade if 6-tick moving average is pointing downward.", "trigger": "DOWNWARD_MOMENTUM"}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -279,6 +283,8 @@ def load_state():
         try:
             with open(HISTORY_FILE, "r") as f:
                 d = json.load(f)
+                if "learnings" not in d:
+                    d["learnings"] = INITIAL_LEARNINGS
                 return d
         except Exception:
             pass
@@ -287,9 +293,10 @@ def load_state():
         "positions": [],
         "balance_history": [20.00, 20.00],
         "activity_logs": INITIAL_LOGS,
+        "learnings": INITIAL_LEARNINGS,
         "auto_pilot": False,
-        "real_wins": 14,
-        "settled_trades": 28,
+        "real_wins": 0,
+        "settled_trades": 0,
         "order_history": [],
         "price_history": {"BTC": [], "ETH": [], "SOL": []}
     }
@@ -307,6 +314,8 @@ if "engine_state" not in st.session_state:
 es = st.session_state.engine_state
 if "price_history" not in es:
     es["price_history"] = {"BTC": [], "ETH": [], "SOL": []}
+if "learnings" not in es:
+    es["learnings"] = INITIAL_LEARNINGS
 
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
@@ -321,12 +330,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "TREND SCANNER", "state": "Monitoring 10-minute patience windows", "stat": "CLOCK: 10m"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "MOMENTUM FILTER", "state": "Authorizing trades ONLY when momentum is positive", "stat": "GATE: TREND"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "MISPRICING CALCULATOR", "state": "Checking net edge buffer against DEX spread", "stat": "NET EDGE: +0.40%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "RISK ALLOCATOR", "state": "Strict cap: Max 4 active positions ($14 cash reserve)", "stat": "CAP: 4 SLICES"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "DISPATCHER", "state": "Executing compliant micro-tranche fill", "stat": "EXEC: CLEAN"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PATROL RISK GUARD", "state": "Guarding +0.50% TP with 10-minute breathing room", "stat": "PATROL: ACTIVE"}
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "TAPE SCANNER", "state": "Monitoring 10m windows across crypto basket", "stat": "SCAN: ACTIVE"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "MEMORY BANK CHECK", "state": "Comparing current setup against learned failure patterns", "stat": f"RULES: {len(es['learnings'])}"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "EXPECTED VALUE", "state": "Confirming statistical edge > spread friction", "stat": "EDGE: +0.45%"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "STAKE ALLOCATOR", "state": f"Active positions: {len(es['positions'])}/{MAX_ACTIVE_POSITIONS} slots", "stat": "SLICE: $1.50"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Routing authorized ticket to live book", "stat": "DISPATCH: READY"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "LEARNING ENGINE", "state": "Logging wins/losses to memory bank to adapt strategy", "stat": "MEM: RECORDING"}
 }
 
 def calculate_market_regime():
@@ -347,9 +356,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">STABILIZED MOMENTUM • 10M WINDOWS</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">TWO-FILE MEMORY ENGINE (LEDGER + LEARNINGS)</span></div>
     </div>
-    <div class="live-pill">● MOMENTUM GUARD ON</div>
+    <div class="live-pill">● ADAPTIVE MEMORY ON</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -374,7 +383,7 @@ with m3:
 with m4:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Win Rate %</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Exposure Cap</div><div class="stat-number c-white">{len(es['positions'])}/{MAX_ACTIVE_POSITIONS} SLOTS</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Memory Rules</div><div class="stat-number c-white">{len(es['learnings'])} LESSONS</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -410,8 +419,6 @@ with col_left:
     st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${total_equity:,.3f}</span>", unsafe_allow_html=True)
     history = es["balance_history"][-40:]
     min_val, max_val = min(history), max(history)
-    
-    # STABILIZED CHART SCALE: At least $0.25 breathing room so micro-cent moves look realistic!
     diff = max(max_val - min_val, 0.25)
     mid_point = (min_val + max_val) / 2
     b_bound = mid_point - (diff / 2)
@@ -470,15 +477,14 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ Risk & Patience Controls")
-    auto_pilot = st.toggle("⚡ ACTIVATE MICRO SWARM", value=es.get("auto_pilot", False))
+    st.subheader("⚙️ Memory & Risk Controls")
+    auto_pilot = st.toggle("⚡ ACTIVATE ADAPTIVE SWARM", value=es.get("auto_pilot", False))
     if auto_pilot != es.get("auto_pilot", False):
         es["auto_pilot"] = auto_pilot
         save_state(es)
         st.rerun()
 
-    # 10-Minute Patience Window
-    window_expiry_minutes = st.slider("Window Expiry (Minutes)", 3, 15, 10, help="Gives trades 10 minutes to reach TP before resolving.")
+    window_expiry_minutes = st.slider("Window Expiry (Minutes)", 3, 15, 10)
     slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
     tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.50, step=0.05)
     sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
@@ -494,7 +500,7 @@ with c1:
         st.rerun()
 
 with c2:
-    tab_inventory, tab_orders = st.tabs(["💼 Active Crypto Inventory (10m Windows)", "📋 Settled Fills & Order History"])
+    tab_inventory, tab_orders, tab_memory = st.tabs(["💼 Live Crypto Inventory", "📋 Settled Fills", "🧠 Memory Bank (Learnings)"])
 
     with tab_inventory:
         if es["positions"]:
@@ -505,12 +511,9 @@ with c2:
                 cur_val = p["qty"] * c_price
                 pnl_d = cur_val - p["cost"]
                 pnl_p = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
-                
                 age_seconds = now_t - p.get("created_at", now_t)
                 time_left_sec = max(0, int((window_expiry_minutes * 60) - age_seconds))
-                mins_left = time_left_sec // 60
-                secs_left = time_left_sec % 60
-                timer_str = f"{mins_left:02d}:{secs_left:02d}"
+                timer_str = f"{time_left_sec // 60:02d}:{time_left_sec % 60:02d}"
 
                 pos_table.append({
                     "Symbol": p["symbol"] + "-USD",
@@ -524,7 +527,6 @@ with c2:
             st.dataframe(pd.DataFrame(pos_table), hide_index=True, use_container_width=True)
         else:
             st.caption(f"No open positions. 100% Cash (${es['cash']:.2f}).")
-        st.caption(f"🛡️ Position Cap: Max {MAX_ACTIVE_POSITIONS} active slices • Preserves ~$14.00 cash reserve")
 
     with tab_orders:
         if es["order_history"]:
@@ -532,6 +534,15 @@ with c2:
         else:
             st.caption("No closed orders recorded yet.")
 
+    with tab_memory:
+        st.caption("💡 Plain-English rules the bot has taught itself from past trades:")
+        if es["learnings"]:
+            for item in es["learnings"]:
+                st.markdown(f"- **Rule #{item['rule_id']}:** {item['lesson']} *(Trigger: `{item['trigger']}`)*")
+        else:
+            st.caption("Memory bank is currently clean. Lessons will generate as trades settle.")
+
+# ADAPTIVE STEP MACHINE WITH PRE-TRADE MEMORY CHECK
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     now_t = time.time()
@@ -539,34 +550,44 @@ def advance_micro_swarm():
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    # Track tick history to evaluate trend momentum
+    # Track momentum
     if target_coin not in es["price_history"]:
         es["price_history"][target_coin] = []
     es["price_history"][target_coin].append(live_p)
     if len(es["price_history"][target_coin]) > 6:
         es["price_history"][target_coin] = es["price_history"][target_coin][-6:]
     
-    # Calculate short-term moving average
     recent_ticks = es["price_history"][target_coin]
     avg_price = sum(recent_ticks) / len(recent_ticks)
     is_bullish = live_p >= avg_price
 
-    # Hard Cap: Max 4 active positions so cash reserve is always protected!
+    # Check Memory Bank Rules!
+    current_regime = calculate_market_regime()
+    memory_blocked = False
+    block_reason = ""
+    
+    if current_regime["state"] == "PANIC":
+        memory_blocked = True
+        block_reason = "Rule #1: Buying into PANIC regime forbidden"
+    elif not is_bullish:
+        memory_blocked = True
+        block_reason = "Rule #2: Downward momentum detected"
+
     has_capacity = len(es["positions"]) < MAX_ACTIVE_POSITIONS
-    can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and is_bullish
+    can_buy = has_capacity and (es["cash"] - slice_size >= 4.00) and (not memory_blocked)
 
     if step == 0:
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # Step 2: PRIOR (Enforces Trend Filter)
-        if not is_bullish:
+        # STEP 2: PRIOR (Runs the Memory Check!)
+        if memory_blocked:
             es["activity_logs"].insert(0, {
-                "dot": "#f59e0b", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
+                "dot": "#ff4d6d", "agent": "PRIOR", "badge": "SKIP", "b_cls": "badge-skip",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"downward drift on {target_coin} (${live_p:,.2f} < avg) · aborting buy to protect cash", "hi": False
+                "desc": f"SKIPPED {target_coin} · {block_reason}", "hi": False
             })
-            st.session_state.active_agent_step = 5 # skip directly to CLOSER patrol
+            st.session_state.active_agent_step = 5 # skip directly to CLOSER patrol!
             save_state(es)
             return
 
@@ -574,7 +595,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": f"+${random.uniform(0.10, 0.35):.2f}", "p_cls": "pnl-pos",
-            "desc": f"momentum bullish on {target_coin} · P={prob:.2f}", "hi": False
+            "desc": f"memory clear · {target_coin} bullish momentum · P={prob:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 2
 
@@ -582,7 +603,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"patience window {window_expiry_minutes}m verified > fee friction", "hi": False
+            "desc": f"statistical edge verified > DEX friction", "hi": False
         })
         st.session_state.active_agent_step = 3
 
@@ -591,14 +612,14 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized ${slice_size:.2f} slice · position {len(es['positions'])+1}/{MAX_ACTIVE_POSITIONS}", "hi": False
+                "desc": f"sized ${slice_size:.2f} slice · slot {len(es['positions'])+1}/{MAX_ACTIVE_POSITIONS}", "hi": False
             })
         else:
             reason = f"Max slots ({MAX_ACTIVE_POSITIONS}/{MAX_ACTIVE_POSITIONS}) full" if not has_capacity else "Cash buffer protected"
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"SAFETY CAP: {reason} · waiting for CLOSER exit", "hi": False
+                "desc": f"GATE ACTIVE: {reason} · waiting for CLOSER exit", "hi": False
             })
         st.session_state.active_agent_step = 4
 
@@ -627,7 +648,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"FILLED {target_coin}-USD on uptrend #${order_id} (${slice_size:.2f})", "hi": True
+                "desc": f"FILLED {target_coin}-USD on confirmed setup #${order_id} (${slice_size:.2f})", "hi": True
             })
         else:
             es["activity_logs"].insert(0, {
@@ -638,6 +659,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 5
 
     elif step == 5:
+        # CLOSER RESOLVES WINDOWS & GENERATES NEW LESSONS ON LOSSES!
         remaining_positions = []
         settled_any = False
         window_limit_sec = window_expiry_minutes * 60
@@ -668,10 +690,21 @@ def advance_micro_swarm():
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
                     "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · cash recycled!", "hi": True
                 })
-            elif pnl_pct <= -abs(sl_target):
+            elif pnl_pct <= -abs(sl_target) or (is_expired and pnl_usd < 0):
+                # STOP-LOSS OR NEGATIVE EXPIRY -> CONDUCT POST-MORTEM & WRITE LESSON!
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
+                
+                # SELF-REFLECTION LEARNING GENERATOR
+                rule_num = len(es["learnings"]) + 1
+                new_lesson = {
+                    "rule_id": rule_num,
+                    "lesson": f"Trade #{p['id']} lost {pnl_pct:.2f}% on {p['symbol']}. Avoid entry when volatility regime is choppy.",
+                    "trigger": f"CHOP_{p['symbol']}"
+                }
+                es["learnings"].insert(0, new_lesson)
+
                 es["order_history"].insert(0, {
                     "Time": time.strftime("%H:%M:%S"),
                     "Side": "SELL",
@@ -684,15 +717,13 @@ def advance_micro_swarm():
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-neg",
-                    "desc": f"STOP-LOSS on {p['symbol']} at {pnl_pct:+.2f}%", "hi": False
+                    "desc": f"LOSS CLOSED on {p['symbol']} ({pnl_pct:+.2f}%) · Lesson #{rule_num} added to Memory", "hi": False
                 })
-            elif is_expired:
+            elif is_expired and pnl_usd >= 0:
                 settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
-                if pnl_usd >= 0:
-                    es["real_wins"] += 1
-                p_cls = "pnl-pos" if pnl_usd >= 0 else "pnl-neg"
+                es["real_wins"] += 1
                 es["order_history"].insert(0, {
                     "Time": time.strftime("%H:%M:%S"),
                     "Side": "SELL",
@@ -704,8 +735,8 @@ def advance_micro_swarm():
                 })
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-                    "pnl": f"{pnl_usd:+.3f}", "p_cls": p_cls,
-                    "desc": f"10m window resolved on {p['symbol']} at {pnl_pct:+.2f}%", "hi": (pnl_usd >= 0)
+                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
+                    "desc": f"10m window resolved on {p['symbol']} at {pnl_pct:+.2f}%", "hi": True
                 })
             else:
                 remaining_positions.append(p)
