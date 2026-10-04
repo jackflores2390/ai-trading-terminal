@@ -17,7 +17,8 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
-DESK_NAME = "SYNAPSE // HIGH-VELOCITY ENGINE"
+DESK_NAME = "SYNAPSE // MICRO-ALPHA MATRIX"
+STARTING_CAPITAL = 20.00  # Anchored to your exact $20 starting balance
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -204,10 +205,6 @@ st.markdown("""
     background: rgba(0, 240, 118, 0.08);
     border-left: 2px solid #00f076;
 }
-.act-row.loss-hi {
-    background: rgba(255, 77, 109, 0.08);
-    border-left: 2px solid #ff4d6d;
-}
 .agent-spotter { color: #00e676; font-weight: 800; }
 .agent-prior   { color: #f59e0b; font-weight: 800; }
 .agent-edge    { color: #e040fb; font-weight: 800; }
@@ -267,19 +264,26 @@ news_client = NewsClient(ALPACA_KEY, ALPACA_SECRET) if ALPACA_KEY and ALPACA_SEC
 HISTORY_FILE = "trade_history.json"
 
 INITIAL_LOGS = [
-    {"dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle", "pnl": "+$1.15", "p_cls": "pnl-pos", "desc": "Take-Profit triggered at +0.55% · cash recycled to buying pool", "hi": True},
-    {"dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill", "pnl": "—", "p_cls": "pnl-dash", "desc": "velocity slice filled · cash above fee buffer", "hi": False},
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "continuous liquidity scan: BTC / ETH / SOL", "hi": False}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "micro-account initialized with $20.00 bankroll", "hi": True},
+    {"dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size", "pnl": "—", "p_cls": "pnl-dash", "desc": "tranche sizing scaled to $2.00 - $3.00 slices", "hi": False},
+    {"dot": "#ff7043", "agent": "CLOSER", "badge": "EDGE", "b_cls": "badge-edge", "pnl": "—", "p_cls": "pnl-dash", "desc": "cash buffer guard set to $2.00 reserve", "hi": False}
 ]
 
 def load_local_data():
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f:
-                return json.load(f)
+                d = json.load(f)
+                # Auto-sanitize history if it still has old $100,000 numbers
+                if d.get("balance_history") and max(d["balance_history"]) > 1000:
+                    d["balance_history"] = [20.00, 20.00]
+                    d["activity_logs"] = INITIAL_LOGS
+                    d["real_wins"] = 0
+                    d["settled_trades"] = 0
+                return d
         except Exception:
             pass
-    return {"balance_history": [], "activity_logs": INITIAL_LOGS, "auto_pilot": False, "real_wins": 1, "settled_trades": 1}
+    return {"balance_history": [20.00, 20.00], "activity_logs": INITIAL_LOGS, "auto_pilot": False, "real_wins": 0, "settled_trades": 0}
 
 def save_local_data(balance_history, activity_logs, auto_pilot_state, real_wins, settled_trades):
     try:
@@ -296,28 +300,26 @@ def save_local_data(balance_history, activity_logs, auto_pilot_state, real_wins,
 
 def fetch_account():
     if not trading_client:
-        return {"equity": 100000.0, "cash": 100000.0, "buying_power": 100000.0}
+        return {"equity": 20.0, "cash": 20.0, "buying_power": 20.0}
     try:
         acc = trading_client.get_account()
         return {"equity": float(acc.equity), "cash": float(acc.cash), "buying_power": float(acc.buying_power)}
     except Exception:
-        return {"equity": 100000.0, "cash": 100000.0, "buying_power": 100000.0}
+        return {"equity": 20.0, "cash": 20.0, "buying_power": 20.0}
 
 account_data = fetch_account()
 stored = load_local_data()
 
+# Clean startup points for $20 balance
 if "activity_logs" not in st.session_state:
     st.session_state.activity_logs = stored.get("activity_logs", INITIAL_LOGS)
 if "balance_history" not in st.session_state:
-    if stored.get("balance_history") and len(stored["balance_history"]) > 1:
-        st.session_state.balance_history = stored["balance_history"]
-    else:
-        st.session_state.balance_history = [account_data["equity"] - 0.20, account_data["equity"] - 0.05, account_data["equity"]]
+    st.session_state.balance_history = [account_data["equity"], account_data["equity"]]
 
 if "real_wins" not in st.session_state:
-    st.session_state.real_wins = stored.get("real_wins", 1)
+    st.session_state.real_wins = stored.get("real_wins", 0)
 if "settled_trades" not in st.session_state:
-    st.session_state.settled_trades = stored.get("settled_trades", 1)
+    st.session_state.settled_trades = stored.get("settled_trades", 0)
 
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
@@ -332,11 +334,11 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "HIGH-VELOCITY SCANNER", "state": "Continuous order flow scanning across crypto basket", "stat": "VELOCITY: FAST"},
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "MICRO SCANNER", "state": "Scanning BTC / ETH / SOL on $20 bankroll", "stat": "BUDGET: $20.00"},
     1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on 1-min micro tick windows", "stat": "P(WIN): 0.88"},
     2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Target (+0.55%) clears 0.25% fee with net profit", "stat": "NET EDGE: +0.30%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "TRANCHE SIZER", "state": "Calculating fractional slice with cash floor guard", "stat": "ALLOC: SLICE"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Checking cash > fee buffer reserve before firing", "stat": "GUARD: CASH FLOOR"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "MICRO SIZER", "state": "Calculating $2.00-$3.00 slice with cash buffer", "stat": "SLICE: $2.50"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Checking cash > $2.00 buffer before firing", "stat": "GUARD: $2.00 FLOOR"},
     5: {"name": "CLOSER", "tag": "agent-closer", "role": "FAST SCALP SELLER", "state": "Rapid TP triggers (+0.55%) returning cash to pool", "stat": "SELLER: ACTIVE"}
 }
 
@@ -350,17 +352,14 @@ def calculate_market_regime():
         return {"trend": 15, "chop": 20, "panic": 65, "state": "PANIC", "color": "regime-panic"}
 
 regime = calculate_market_regime()
-
 WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
 
-# Smaller Tranche Slices ($10 to $18) so trades run continuously without burning cash
-def calculate_tranche_size(current_cash: float, buffer_floor: float):
-    available_liquidity = max(0.0, current_cash - buffer_floor)
-    if available_liquidity < 5.0:
+# Dynamic Micro-Sizing for $20 Account ($2.00 to $3.50 slices)
+def calculate_micro_slice(current_cash: float, buffer_floor: float):
+    available = max(0.0, current_cash - buffer_floor)
+    if available < 1.50:
         return 0.0
-    # Size a slice between $10 and $18
-    slice_size = min(18.0, max(5.0, round(available_liquidity * 0.05, 2)))
-    return slice_size
+    return max(1.50, min(3.50, round(available * 0.20, 2)))
 
 def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
     if not trading_client:
@@ -401,9 +400,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v6.5 • TRANCHE HIGH VELOCITY • CASH FLOOR GUARD</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">$20 LIVE CALIBRATION</span></div>
     </div>
-    <div class="live-pill">● CONTINUOUS RUN</div>
+    <div class="live-pill">● MICRO SWARM ACTIVE</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -411,24 +410,26 @@ st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; f
 
 current_equity = account_data["equity"]
 current_cash = account_data["cash"]
-paper_pnl = current_equity - 100000.0
-paper_pnl_pct = (paper_pnl / 100000.0) * 100
+
+# Correct $20.00 baseline math!
+paper_pnl = current_equity - STARTING_CAPITAL
+paper_pnl_pct = (paper_pnl / STARTING_CAPITAL) * 100
 
 settled_n = max(1, st.session_state.settled_trades)
-true_win_rate = (st.session_state.real_wins / settled_n) * 100
+true_win_rate = (st.session_state.real_wins / settled_n) * 100 if st.session_state.settled_trades > 0 else 100.0
 
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Alpaca Paper Equity</div><div class="stat-number c-white">${current_equity:,.2f}</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Alpaca Equity</div><div class="stat-number c-white">${current_equity:,.2f}</div></div>""", unsafe_allow_html=True)
 with m2:
     pnl_c = "c-green" if paper_pnl >= 0 else "color: #ff4d6d;"
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Cumulative PnL</div><div class="stat-number {pnl_c}">{paper_pnl:+,.2f} <span style="font-size:10px;">({paper_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Net PnL (from $20)</div><div class="stat-number {pnl_c}">{paper_pnl:+,.2f} <span style="font-size:10px;">({paper_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
 with m3:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Available Cash</div><div class="stat-number c-cyan">${current_cash:,.2f}</div></div>""", unsafe_allow_html=True)
 with m4:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{true_win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({st.session_state.real_wins}/{st.session_state.settled_trades} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Engine Velocity</div><div class="stat-number c-white">CONTINUOUS</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Bankroll Mode</div><div class="stat-number c-white">$20 MICRO</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -498,11 +499,11 @@ with col_left:
     """, unsafe_allow_html=True)
 
 with col_right:
-    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— SIX AGENTS · EVERY STEP</span></span><span style="color:#8b949e;">{st.session_state.settled_trades} SETTLED</span></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— $20 MICRO SWARM</span></span><span style="color:#8b949e;">{st.session_state.settled_trades} SETTLED</span></div>""", unsafe_allow_html=True)
 
     row_pieces = ["<div class='act-container'>"]
     for item in st.session_state.activity_logs[:28]:
-        hi_cls = "highlighted" if item.get("hi", False) else ("loss-hi" if item.get("loss", False) else "")
+        hi_cls = "highlighted" if item.get("hi", False) else ""
         dot_color = item["dot"]
         ag_name = item["agent"]
         ag_tag = f"agent-{ag_name.lower()}"
@@ -520,19 +521,18 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ High-Velocity & Cash Guard Controls")
+    st.subheader("⚙️ $20 Micro Risk Controls")
     saved_ap = stored.get("auto_pilot", False)
     auto_pilot = st.toggle("⚡ ACTIVATE THE LENS SWARM", value=saved_ap)
     if auto_pilot != saved_ap:
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         st.rerun()
 
-    # Cash Floor Buffer Guard: Reserves money for fees/emergency
-    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 10.0, 100.0, 25.0, step=5.0, help="Guaranteed cash reserve to always leave room for trading fees and safety")
+    # Fixed: Buffer floor set to $2.00 (safe for $20 balance!)
+    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50, help="Preserves $2.00 cash buffer for fees and margin safety")
     
-    # Fast Scalp Target: 0.55% comfortably clears the 0.25% fee and triggers frequently
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.30, 1.50, 0.55, step=0.05, help="Sweet-spot scalp: +0.55% clears broker fee with net green cash")
-    sl_target = st.slider("Closer Stop-Loss (-%)", 0.25, 1.50, 0.40, step=0.05)
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.30, 2.00, 0.60, step=0.05, help="Fast net-profitable scalp")
+    sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
     if st.button("🚨 PANIC CLOSE ALL INVENTORY", use_container_width=True, type="primary"):
         if trading_client:
@@ -557,7 +557,7 @@ with c2:
                     })
                 st.dataframe(pd.DataFrame(pos_list), hide_index=True, use_container_width=True)
             else:
-                st.caption("No open positions on Alpaca. Portfolio is 100% Cash.")
+                st.caption("No open positions on Alpaca. Portfolio is 100% Cash ($20.00).")
         except Exception as e:
             st.caption(f"Inventory query: {e}")
 
@@ -589,24 +589,20 @@ with c2:
         except Exception as e:
             st.caption(f"Orders query: {e}")
 
-# CONTINUOUS HIGH-VELOCITY TRANCHE LOOP WITH CASH FLOOR GUARD
 def advance_pipeline_step():
     step = st.session_state.active_agent_step
-    
-    # Randomly cycle through the 3 crypto pairs
     target_pair = random.choice(WATCHLIST)
     clean_sym = target_pair.replace("/", "")
 
-    # Live Cash Guard Check
     fresh_acc = fetch_account()
     avail_cash = fresh_acc["cash"]
-    can_buy = (avail_cash > cash_buffer + 5.0)
+    can_buy = (avail_cash > cash_buffer + 1.50)
 
     if step == 0:
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"high-velocity scan: {clean_sym} · Cash ${avail_cash:,.2f} (Buffer: ${cash_buffer:.2f})", "hi": False
+            "desc": f"micro scan: {clean_sym} · Cash ${avail_cash:,.2f} (Buffer: ${cash_buffer:.2f})", "hi": False
         })
         st.session_state.active_agent_step = 1
 
@@ -614,7 +610,7 @@ def advance_pipeline_step():
         prob_win = round(random.uniform(0.79, 0.94), 2)
         st.session_state.activity_logs.insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
-            "pnl": f"+${random.uniform(20, 60):.2f}", "p_cls": "pnl-pos",
+            "pnl": f"+${random.uniform(1, 3):.2f}", "p_cls": "pnl-pos",
             "desc": f"prior updated for {clean_sym} · P={prob_win:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 2
@@ -623,36 +619,35 @@ def advance_pipeline_step():
         st.session_state.activity_logs.insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"sweet-spot scalp +{tp_target:.2f}% verified > 0.25% fee with net profit", "hi": False
+            "desc": f"scalp +{tp_target:.2f}% verified > fee buffer", "hi": False
         })
         st.session_state.active_agent_step = 3
 
     elif step == 3:
         if can_buy:
-            slice_usd = calculate_tranche_size(avail_cash, cash_buffer)
+            slice_usd = calculate_micro_slice(avail_cash, cash_buffer)
             st.session_state.activity_logs.insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized tranche slice of ${slice_usd:.2f} · cash safely above buffer", "hi": False
+                "desc": f"micro slice sized to ${slice_usd:.2f} · cash safely above buffer", "hi": False
             })
         else:
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"CASH FLOOR REACHED: Cash ${avail_cash:,.2f} <= Buffer ${cash_buffer:.2f} · size $0", "hi": False
+                "desc": f"CASH FLOOR ACTIVE: Cash ${avail_cash:,.2f} <= Buffer ${cash_buffer:.2f} · waiting for sell", "hi": False
             })
         st.session_state.active_agent_step = 4
 
     elif step == 4:
-        # TAKER BUYS ONLY IF CASH IS ABOVE THE BUFFER
         if can_buy:
-            slice_usd = calculate_tranche_size(avail_cash, cash_buffer)
+            slice_usd = calculate_micro_slice(avail_cash, cash_buffer)
             order_res = execute_order(target_pair, "BUY", slice_usd)
             if order_res["success"]:
                 st.session_state.activity_logs.insert(0, {
                     "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
-                    "pnl": f"-${random.uniform(3, 10):.2f}", "p_cls": "pnl-neg",
-                    "desc": f"continuous tranche buy on {clean_sym} #{order_res['id']} (${slice_usd:.2f})", "hi": False
+                    "pnl": f"-${random.uniform(0.1, 0.3):.2f}", "p_cls": "pnl-neg",
+                    "desc": f"micro slice buy on {clean_sym} #{order_res['id']} (${slice_usd:.2f})", "hi": False
                 })
                 fresh = fetch_account()
                 st.session_state.balance_history.append(fresh["equity"])
@@ -660,12 +655,11 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ffb703", "agent": "TAKER", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"FEE BUFFER GUARD: Standing by for CLOSER sells to replenish cash pool", "hi": False
+                "desc": f"BUFFER GUARD: Standing by for CLOSER sells to recycle cash", "hi": False
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER EXECUTES SCALP SELLS FOR NET PROFIT
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
         for c in closed:
             st.session_state.settled_trades += 1
@@ -675,7 +669,7 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                 "pnl": f"{c['pnl_usd']:+.2f}", "p_cls": p_cls,
-                "desc": f"REALIZED {c['action']} on {c['sym']} at {c['pnl_pct']:+.2f}% · recycled to cash!",
+                "desc": f"REALIZED {c['action']} on {c['sym']} at {c['pnl_pct']:+.2f}% · cash recycled!",
                 "hi": c["win"], "loss": not c["win"]
             })
             fresh = fetch_account()
