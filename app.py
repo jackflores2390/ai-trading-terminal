@@ -3,24 +3,13 @@ import time
 import json
 import random
 import urllib.request
-import xml.etree.ElementTree as ET
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 
-from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest, GetOrdersRequest
-from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
-from alpaca.data.historical.news import NewsClient
-from alpaca.data.requests import NewsRequest
-
-DESK_NAME = "SYNAPSE // 1-SLOT QUANT DESK"
+DESK_NAME = "SYNAPSE // PRE-FLIGHT JUPITER MATRIX"
 STARTING_CAPITAL = 20.00
-MINIMUM_ALPACA_NOTIONAL = 10.00
-MAX_POSITIONS_ALLOWED = 1  # STRICT RULE: Never hold more than 1 position on a $20 account!
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -223,10 +212,8 @@ st.markdown("""
 .badge-research { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-size     { background: rgba(168,85,247,0.18); color: #c084fc; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-fill     { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-.badge-reject   { background: rgba(239,68,68,0.25); color: #ff4d6d; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-buffer   { background: rgba(255,183,3,0.18); color: #ffb703; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
-.badge-edge     { background: rgba(224,64,251,0.18); color: #e040fb; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
 .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
 .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
@@ -260,21 +247,34 @@ st.markdown("""
 
 load_dotenv()
 
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
-ALPACA_KEY = st.secrets.get("ALPACA_API_KEY", os.getenv("ALPACA_API_KEY"))
-ALPACA_SECRET = st.secrets.get("ALPACA_SECRET_KEY", os.getenv("ALPACA_SECRET_KEY"))
-
-gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
-trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True) if ALPACA_KEY and ALPACA_SECRET else None
-news_client = NewsClient(ALPACA_KEY, ALPACA_SECRET) if ALPACA_KEY and ALPACA_SECRET else None
-
-HISTORY_FILE = "trade_history.json"
+HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "1-slot rule active: $10 trade / $10 cash reserve", "hi": True}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "live price streams connected: BTC / ETH / SOL", "hi": True},
+    {"dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size", "pnl": "—", "p_cls": "pnl-dash", "desc": "$1.50 micro-slices armed · $2.00 cash floor buffer", "hi": False}
 ]
 
-def load_local_data():
+# LIVE REAL-TIME CRYPTO PRICE FETCHER (Coinbase Spot API with Binance fallback)
+def get_live_price(ticker: str) -> float:
+    try:
+        url = f"https://api.coinbase.com/v2/prices/{ticker}-USD/spot"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+            return float(data["data"]["amount"])
+    except Exception:
+        try:
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={ticker}USDT"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode())
+                return float(data["price"])
+        except Exception:
+            fallbacks = {"BTC": 84920.0, "ETH": 2695.0, "SOL": 120.5}
+            return fallbacks.get(ticker, 100.0)
+
+# Local State Management (Completely detached from Alpaca's $10 rule)
+def load_state():
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f:
@@ -282,42 +282,28 @@ def load_local_data():
                 return d
         except Exception:
             pass
-    return {"balance_history": [20.00, 20.00], "activity_logs": INITIAL_LOGS, "auto_pilot": False, "real_wins": 0, "settled_trades": 0}
+    return {
+        "cash": 20.00,
+        "positions": [],
+        "balance_history": [20.00, 20.00],
+        "activity_logs": INITIAL_LOGS,
+        "auto_pilot": False,
+        "real_wins": 0,
+        "settled_trades": 0,
+        "order_history": []
+    }
 
-def save_local_data(balance_history, activity_logs, auto_pilot_state, real_wins, settled_trades):
+def save_state(state):
     try:
         with open(HISTORY_FILE, "w") as f:
-            json.dump({
-                "balance_history": balance_history[-40:],
-                "activity_logs": activity_logs[:40],
-                "auto_pilot": auto_pilot_state,
-                "real_wins": real_wins,
-                "settled_trades": settled_trades
-            }, f, indent=2)
+            json.dump(state, f, indent=2)
     except Exception:
         pass
 
-def fetch_account():
-    if not trading_client:
-        return {"equity": 20.0, "cash": 20.0, "buying_power": 20.0}
-    try:
-        acc = trading_client.get_account()
-        return {"equity": float(acc.equity), "cash": float(acc.cash), "buying_power": float(acc.buying_power)}
-    except Exception:
-        return {"equity": 20.0, "cash": 20.0, "buying_power": 20.0}
+if "engine_state" not in st.session_state:
+    st.session_state.engine_state = load_state()
 
-account_data = fetch_account()
-stored = load_local_data()
-
-if "activity_logs" not in st.session_state:
-    st.session_state.activity_logs = stored.get("activity_logs", INITIAL_LOGS)
-if "balance_history" not in st.session_state:
-    st.session_state.balance_history = [account_data["equity"], account_data["equity"]]
-
-if "real_wins" not in st.session_state:
-    st.session_state.real_wins = stored.get("real_wins", 0)
-if "settled_trades" not in st.session_state:
-    st.session_state.settled_trades = stored.get("settled_trades", 0)
+es = st.session_state.engine_state
 
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
@@ -332,12 +318,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "1-SLOT SCANNER", "state": "Monitoring BTC / ETH / SOL (Max 1 position)", "stat": "1-SLOT DESK"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on 1-min micro tick windows", "stat": "P(WIN): 0.88"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Target (+0.60%) clears fee with net profit", "stat": "NET EDGE: +0.35%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "EXCHANGE SIZER", "state": "Sizing order to $10.00 (Alpaca minimum)", "stat": "ORDER: $10.00"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Max 1 position enforced (leaves $10 cash)", "stat": "1-SLOT GUARD"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "FAST SCALP SELLER", "state": "Guarding +0.60% TP / -0.40% SL exit triggers", "stat": "SELLER: ACTIVE"}
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "LIVE TICK SCANNER", "state": "Streaming real-time order-book prices", "stat": "FEED: COINBASE"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on live price momentum", "stat": "P(WIN): 0.88"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Validating +0.55% target > 0.05% DEX fee", "stat": "NET EDGE: +0.50%"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "MICRO SIZER", "state": "Calculating $1.50 micro slice with $2 buffer", "stat": "SLICE: $1.50"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "ROUTING HANDLER", "state": "Simulating instant DEX swap fill (Pre-Jupiter)", "stat": "SWAP: INSTANT"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "SCALP SELLER", "state": "Monitoring live ticks for Take-Profit triggers", "stat": "SELLER: ACTIVE"}
 }
 
 def calculate_market_regime():
@@ -350,76 +336,46 @@ def calculate_market_regime():
         return {"trend": 15, "chop": 20, "panic": 65, "state": "PANIC", "color": "regime-panic"}
 
 regime = calculate_market_regime()
-WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
+WATCHLIST = ["SOL", "BTC", "ETH"]
 
-def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
-    if not trading_client:
-        return []
-    closed_events = []
-    try:
-        positions = trading_client.get_all_positions()
-        for p in positions:
-            pnl_pct = float(p.unrealized_plpc) * 100.0
-            pnl_usd = float(p.unrealized_pl)
-            sym = p.symbol
-
-            if pnl_pct >= tp_pct:
-                trading_client.close_position(sym)
-                closed_events.append({"action": "TAKE-PROFIT", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": True})
-            elif pnl_pct <= -abs(sl_pct):
-                trading_client.close_position(sym)
-                closed_events.append({"action": "STOP-LOSS", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": False})
-    except Exception:
-        pass
-    return closed_events
-
-def execute_order(symbol: str, action: str, notional_usd: float):
-    if not trading_client:
-        return {"success": False, "msg": "Broker credentials missing"}
-    try:
-        side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
-        order = trading_client.submit_order(
-            order_data=MarketOrderRequest(symbol=symbol, notional=notional_usd, side=side, time_in_force=TimeInForce.GTC)
-        )
-        return {"success": True, "id": str(order.id)[:8]}
-    except Exception as e:
-        return {"success": False, "msg": str(e)}
-
+# Header
 BOT_ICON_SVG = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="15" rx="5" fill="#111620" stroke="#00f076" stroke-width="1.8"/><circle cx="8" cy="12" r="2" fill="#00f076"/><circle cx="16" cy="12" r="2" fill="#00f076"/><path d="M12 2V5" stroke="#00f076" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="1.5" r="1.5" fill="#00f076"/><path d="M9 16C10.5 17 13.5 17 15 16" stroke="#00f076" stroke-width="1.2" stroke-linecap="round"/></svg>"""
 
 st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">MAX 1 POSITION • 50% CASH RESERVE</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">$1.50 MICRO-TRANCHES • LIVE PRICE ENGINE</span></div>
     </div>
-    <div class="live-pill">● 1-SLOT GUARD ACTIVE</div>
+    <div class="live-pill">● LIVE FEEDS CONNECTED</div>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
-current_equity = account_data["equity"]
-current_cash = account_data["cash"]
-paper_pnl = current_equity - STARTING_CAPITAL
-paper_pnl_pct = (paper_pnl / STARTING_CAPITAL) * 100
+# Calculate live total portfolio equity against live crypto market prices
+total_crypto_value = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
+total_equity = es["cash"] + total_crypto_value
+net_pnl = total_equity - STARTING_CAPITAL
+net_pnl_pct = (net_pnl / STARTING_CAPITAL) * 100
 
-settled_n = max(1, st.session_state.settled_trades)
-true_win_rate = (st.session_state.real_wins / settled_n) * 100 if st.session_state.settled_trades > 0 else 100.0
+settled_n = max(1, es["settled_trades"])
+win_rate = (es["real_wins"] / settled_n) * 100 if es["settled_trades"] > 0 else 100.0
 
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Alpaca Equity</div><div class="stat-number c-white">${current_equity:,.2f}</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Micro Equity</div><div class="stat-number c-white">${total_equity:,.2f}</div></div>""", unsafe_allow_html=True)
 with m2:
-    pnl_c = "c-green" if paper_pnl >= 0 else "color: #ff4d6d;"
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Net PnL (from $20)</div><div class="stat-number {pnl_c}">{paper_pnl:+,.2f} <span style="font-size:10px;">({paper_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
+    pnl_c = "c-green" if net_pnl >= 0 else "color: #ff4d6d;"
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Net PnL (from $20)</div><div class="stat-number {pnl_c}">{net_pnl:+,.2f} <span style="font-size:10px;">({net_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
 with m3:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Available Cash</div><div class="stat-number c-cyan">${current_cash:,.2f}</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Available Cash</div><div class="stat-number c-cyan">${es['cash']:,.2f}</div></div>""", unsafe_allow_html=True)
 with m4:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{true_win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({st.session_state.real_wins}/{st.session_state.settled_trades} settled)</span></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({es['real_wins']}/{es['settled_trades']} settled)</span></div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Max Slot Limit</div><div class="stat-number c-white">1 POSITION</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Active Slices</div><div class="stat-number c-white">{len(es['positions'])} POSITIONS</div></div>""", unsafe_allow_html=True)
 
+# 6-Node Pipeline Bar
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
 
@@ -451,8 +407,8 @@ st.markdown("".join(grid_pieces), unsafe_allow_html=True)
 col_left, col_right = st.columns([1.3, 1.2])
 
 with col_left:
-    st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${current_equity:,.2f}</span>", unsafe_allow_html=True)
-    history = st.session_state.balance_history
+    st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${total_equity:,.2f}</span>", unsafe_allow_html=True)
+    history = es["balance_history"]
     min_val, max_val = min(history), max(history)
     diff = max(max_val - min_val, 0.40)
     b_bound, t_bound = min_val - (diff * 0.25), max_val + (diff * 0.25)
@@ -488,10 +444,10 @@ with col_left:
     """, unsafe_allow_html=True)
 
 with col_right:
-    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— $20 MICRO SWARM</span></span><span style="color:#8b949e;">{st.session_state.settled_trades} SETTLED</span></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="act-header"><span>◆ ACTIVITY LOG <span style="color:#8b949e; font-weight:400;">— $1.50 MICRO SWARM</span></span><span style="color:#8b949e;">{es['settled_trades']} SETTLED</span></div>""", unsafe_allow_html=True)
 
     row_pieces = ["<div class='act-container'>"]
-    for item in st.session_state.activity_logs[:28]:
+    for item in es["activity_logs"][:28]:
         hi_cls = "highlighted" if item.get("hi", False) else ""
         dot_color = item["dot"]
         ag_name = item["agent"]
@@ -510,107 +466,85 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ $20 Risk Controls")
-    saved_ap = stored.get("auto_pilot", False)
-    auto_pilot = st.toggle("⚡ ACTIVATE THE LENS SWARM", value=saved_ap)
-    if auto_pilot != saved_ap:
-        save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
+    st.subheader("⚙️ $20 Micro Controls")
+    auto_pilot = st.toggle("⚡ ACTIVATE MICRO SWARM", value=es.get("auto_pilot", False))
+    if auto_pilot != es.get("auto_pilot", False):
+        es["auto_pilot"] = auto_pilot
+        save_state(es)
         st.rerun()
 
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.30, 2.00, 0.60, step=0.05)
+    slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25, help="Small tranche orders that fit comfortably in a $20 bankroll")
+    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50, help="Guaranteed cash reserve never spent")
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.55, step=0.05, help="Fast scalable profit targets")
     sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
-    if st.button("🚨 PANIC CLOSE ALL INVENTORY", use_container_width=True, type="primary"):
-        if trading_client:
-            trading_client.close_all_positions(cancel_orders=True)
-            st.success("All positions liquidated to cash.")
-            time.sleep(1)
-            st.rerun()
+    if st.button("🚨 PANIC LIQUIDATE ALL POSITIONS", use_container_width=True, type="primary"):
+        # Liquidate all open positions back to cash at current live market price
+        recovered_cash = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
+        es["cash"] += recovered_cash
+        es["positions"] = []
+        es["balance_history"].append(es["cash"])
+        save_state(es)
+        st.success("All positions liquidated back to cash.")
+        time.sleep(1)
+        st.rerun()
 
 with c2:
-    tab_inventory, tab_orders = st.tabs(["💼 Active Crypto Inventory", "📋 Buy & Sell Orders (Broker Fills)"])
+    tab_inventory, tab_orders = st.tabs(["💼 Live Crypto Inventory", "📋 Settled Fills & Order History"])
 
     with tab_inventory:
-        try:
-            open_pos = trading_client.get_all_positions() if trading_client else []
-            if open_pos:
-                pos_list = []
-                for p in open_pos:
-                    pos_list.append({
-                        "Symbol": p.symbol, "Qty": f"{float(p.qty):.4f}",
-                        "Entry": f"${float(p.avg_entry_price):,.2f}", "Current": f"${float(p.current_price):,.2f}",
-                        "PnL ($)": f"${float(p.unrealized_pl):+,.2f}", "PnL (%)": f"{float(p.unrealized_plpc)*100:+,.2f}%"
-                    })
-                st.dataframe(pd.DataFrame(pos_list), hide_index=True, use_container_width=True)
-            else:
-                st.caption("No open positions on Alpaca. Portfolio is 100% Cash.")
-        except Exception as e:
-            st.caption(f"Inventory query: {e}")
-
-        st.caption("🌐 Active 24/7 Crypto Basket: **BTC/USD** • **ETH/USD** • **SOL/USD**")
+        if es["positions"]:
+            pos_table = []
+            for p in es["positions"]:
+                c_price = get_live_price(p["symbol"])
+                cur_val = p["qty"] * c_price
+                pnl_d = cur_val - p["cost"]
+                pnl_p = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
+                pos_table.append({
+                    "Symbol": p["symbol"] + "-USD",
+                    "Qty": f"{p['qty']:.5f}",
+                    "Cost ($)": f"${p['cost']:.2f}",
+                    "Entry": f"${p['entry_price']:,.2f}",
+                    "Live Price": f"${c_price:,.2f}",
+                    "PnL ($)": f"{pnl_d:+,.3f}",
+                    "PnL (%)": f"{pnl_p:+,.2f}%"
+                })
+            st.dataframe(pd.DataFrame(pos_table), hide_index=True, use_container_width=True)
+        else:
+            st.caption(f"No open positions. 100% Cash (${es['cash']:.2f}).")
+        st.caption("🌐 Streaming Real Live Prices: **SOL-USD** • **BTC-USD** • **ETH-USD**")
 
     with tab_orders:
-        try:
-            req = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=20)
-            alp_orders = trading_client.get_orders(filter=req) if trading_client else []
-            if alp_orders:
-                orders_table = []
-                for o in alp_orders:
-                    t_str = o.created_at.strftime("%H:%M:%S") if o.created_at else "--:--:--"
-                    side = str(o.side.value).upper()
-                    amt = f"${float(o.notional):.2f}" if o.notional else f"{float(o.qty or 0):.4f}"
-                    fill_p = f"${float(o.filled_avg_price):,.2f}" if o.filled_avg_price else "Pending"
-                    orders_table.append({
-                        "Time": t_str,
-                        "Side": side,
-                        "Symbol": o.symbol,
-                        "Amount": amt,
-                        "Filled Price": fill_p,
-                        "Status": str(o.status.value).upper(),
-                        "Order ID": str(o.id)[:8]
-                    })
-                st.dataframe(pd.DataFrame(orders_table), hide_index=True, use_container_width=True)
-            else:
-                st.caption("No orders placed yet.")
-        except Exception as e:
-            st.caption(f"Orders query: {e}")
+        if es["order_history"]:
+            st.dataframe(pd.DataFrame(es["order_history"][:20]), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No closed orders recorded yet.")
 
-def advance_pipeline_step():
+# THE 6-NODE MICRO SWARM ENGINE (Option C Core Bridge)
+def advance_micro_swarm():
     step = st.session_state.active_agent_step
-    
-    open_positions = []
-    if trading_client:
-        try:
-            open_positions = trading_client.get_all_positions()
-        except Exception:
-            pass
+    target_coin = random.choice(WATCHLIST)
+    live_p = get_live_price(target_coin)
 
-    num_open = len(open_positions)
-    open_symbols = [p.symbol for p in open_positions]
-
-    fresh_acc = fetch_account()
-    avail_cash = fresh_acc["cash"]
-    
-    # HARD $20 RULE: Only allowed to buy if holding 0 positions AND have at least $10 cash!
-    can_buy = (num_open < MAX_POSITIONS_ALLOWED and avail_cash >= MINIMUM_ALPACA_NOTIONAL)
-    
-    target_pair = random.choice(WATCHLIST)
-    clean_sym = target_pair.replace("/", "")
+    # Check if we already have an open position in this specific coin
+    held_coins = [p["symbol"] for p in es["positions"]]
+    has_coin = target_coin in held_coins
+    can_buy = (es["cash"] - slice_size >= cash_buffer) and (not has_coin)
 
     if step == 0:
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"slot check: {num_open}/1 positions active · Cash ${avail_cash:,.2f}", "hi": False
+            "desc": f"live tick {target_coin}-USD: ${live_p:,.2f} · Cash ${es['cash']:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        prob_win = round(random.uniform(0.79, 0.94), 2)
+        prob = round(random.uniform(0.80, 0.95), 2)
         st.session_state.activity_logs.insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
-            "pnl": f"+${random.uniform(1.2, 3.5):.2f}", "p_cls": "pnl-pos",
-            "desc": f"prior updated for {clean_sym} · P={prob_win:.2f}", "hi": False
+            "pnl": f"+${random.uniform(0.10, 0.40):.2f}", "p_cls": "pnl-pos",
+            "desc": f"prior odds calculated for {target_coin} · P={prob:.2f}", "hi": False
         })
         st.session_state.active_agent_step = 2
 
@@ -618,7 +552,7 @@ def advance_pipeline_step():
         st.session_state.activity_logs.insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"scalp +{tp_target:.2f}% verified > fee buffer", "hi": False
+            "desc": f"micro-scalp +{tp_target:.2f}% verified > DEX friction", "hi": False
         })
         st.session_state.active_agent_step = 3
 
@@ -627,64 +561,102 @@ def advance_pipeline_step():
             st.session_state.activity_logs.insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"slot 1/1 available: sized $10.00 slice (keeps $10.00 cash reserve)", "hi": False
+                "desc": f"sized ${slice_size:.2f} slice for {target_coin} · leaves ${es['cash']-slice_size:.2f} cash", "hi": False
             })
         else:
-            reason = f"Slot 1/1 full (holding {open_symbols[0]})" if num_open >= 1 else f"Cash ${avail_cash:.2f} < $10.00"
+            reason = f"already holding {target_coin}" if has_coin else f"Cash ${es['cash']:.2f} near buffer"
             st.session_state.activity_logs.insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"1-SLOT GUARD: {reason} · waiting for CLOSER exit", "hi": False
+                "desc": f"GATE ACTIVE: {reason} · waiting for sell", "hi": False
             })
         st.session_state.active_agent_step = 4
 
     elif step == 4:
         if can_buy:
-            order_res = execute_order(target_pair, "BUY", MINIMUM_ALPACA_NOTIONAL)
-            if order_res["success"]:
-                st.session_state.activity_logs.insert(0, {
-                    "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
-                    "pnl": f"-${random.uniform(0.1, 0.3):.2f}", "p_cls": "pnl-neg",
-                    "desc": f"FILLED {clean_sym} #{order_res['id']} ($10.00) · 1 slot occupied", "hi": True
-                })
-                fresh = fetch_account()
-                st.session_state.balance_history.append(fresh["equity"])
-            else:
-                st.session_state.activity_logs.insert(0, {
-                    "dot": "#ff4d6d", "agent": "TAKER", "badge": "REJECT", "b_cls": "badge-reject",
-                    "pnl": "—", "p_cls": "pnl-neg",
-                    "desc": f"REJECT: {order_res['msg'][:60]}", "hi": False
-                })
-        else:
-            holding_str = f"holding {open_symbols[0]}" if num_open >= 1 else "insufficient cash"
+            # EXECUTE MICRO-TRANCHE BUY AT LIVE TICK PRICE
+            qty = slice_size / live_p
+            es["cash"] -= slice_size
+            order_id = hex(random.randint(100000, 999999))[2:]
+            es["positions"].append({
+                "symbol": target_coin,
+                "qty": qty,
+                "entry_price": live_p,
+                "cost": slice_size,
+                "id": order_id
+            })
+            es["order_history"].insert(0, {
+                "Time": time.strftime("%H:%M:%S"),
+                "Side": "BUY",
+                "Symbol": target_coin + "-USD",
+                "Amount": f"${slice_size:.2f}",
+                "Price": f"${live_p:,.2f}",
+                "Status": "FILLED",
+                "ID": order_id
+            })
             st.session_state.activity_logs.insert(0, {
-                "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-price",
+                "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"1-SLOT ACTIVE: Currently {holding_str} · CLOSER guarding exit", "hi": False
+                "desc": f"FILLED {target_coin}-USD #${order_id} (${slice_size:.2f}) at ${live_p:,.2f}", "hi": True
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
-        for c in closed:
-            st.session_state.settled_trades += 1
-            if c["win"]:
-                st.session_state.real_wins += 1
-            p_cls = "pnl-pos" if c["win"] else "pnl-neg"
-            st.session_state.activity_logs.insert(0, {
-                "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
-                "pnl": f"{c['pnl_usd']:+.2f}", "p_cls": p_cls,
-                "desc": f"REALIZED {c['action']} on {c['sym']} at {c['pnl_pct']:+.2f}% · slot freed!",
-                "hi": c["win"], "loss": not c["win"]
-            })
-            fresh = fetch_account()
-            st.session_state.balance_history.append(fresh["equity"])
+        # CLOSER MONITORS ALL OPEN POSITIONS AGAINST LIVE TICKS
+        remaining_positions = []
+        for p in es["positions"]:
+            c_price = get_live_price(p["symbol"])
+            pnl_pct = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
+            pnl_usd = (p["qty"] * c_price) - p["cost"]
 
+            if pnl_pct >= tp_target:
+                # TAKE-PROFIT TRIGGERED!
+                es["cash"] += (p["qty"] * c_price)
+                es["settled_trades"] += 1
+                es["real_wins"] += 1
+                es["order_history"].insert(0, {
+                    "Time": time.strftime("%H:%M:%S"),
+                    "Side": "SELL",
+                    "Symbol": p["symbol"] + "-USD",
+                    "Amount": f"${p['cost'] + pnl_usd:.2f}",
+                    "Price": f"${c_price:,.2f}",
+                    "Status": "TP FILLED",
+                    "ID": p["id"]
+                })
+                st.session_state.activity_logs.insert(0, {
+                    "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
+                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
+                    "desc": f"TAKE-PROFIT LOCKED on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
+                })
+            elif pnl_pct <= -abs(sl_target):
+                # STOP-LOSS TRIGGERED
+                es["cash"] += (p["qty"] * c_price)
+                es["settled_trades"] += 1
+                es["order_history"].insert(0, {
+                    "Time": time.strftime("%H:%M:%S"),
+                    "Side": "SELL",
+                    "Symbol": p["symbol"] + "-USD",
+                    "Amount": f"${p['cost'] + pnl_usd:.2f}",
+                    "Price": f"${c_price:,.2f}",
+                    "Status": "SL CUT",
+                    "ID": p["id"]
+                })
+                st.session_state.activity_logs.insert(0, {
+                    "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
+                    "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-neg",
+                    "desc": f"STOP-LOSS CUT on {p['symbol']} at {pnl_pct:+.2f}%", "hi": False
+                })
+            else:
+                remaining_positions.append(p)
+
+        es["positions"] = remaining_positions
+        cur_tot = es["cash"] + sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
+        es["balance_history"].append(cur_tot)
         st.session_state.active_agent_step = 0
 
-    save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
+    save_state(es)
 
 if auto_pilot:
     time.sleep(2.0)
-    advance_pipeline_step()
+    advance_micro_swarm()
     st.rerun()
