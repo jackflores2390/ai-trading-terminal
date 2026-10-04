@@ -254,7 +254,6 @@ INITIAL_LOGS = [
     {"dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size", "pnl": "—", "p_cls": "pnl-dash", "desc": "$1.50 micro-slices armed · $2.00 cash floor buffer", "hi": False}
 ]
 
-# LIVE REAL-TIME CRYPTO PRICE FETCHER (Coinbase Spot API with Binance fallback)
 def get_live_price(ticker: str) -> float:
     try:
         url = f"https://api.coinbase.com/v2/prices/{ticker}-USD/spot"
@@ -273,7 +272,6 @@ def get_live_price(ticker: str) -> float:
             fallbacks = {"BTC": 84920.0, "ETH": 2695.0, "SOL": 120.5}
             return fallbacks.get(ticker, 100.0)
 
-# Local State Management (Completely detached from Alpaca's $10 rule)
 def load_state():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -338,7 +336,6 @@ def calculate_market_regime():
 regime = calculate_market_regime()
 WATCHLIST = ["SOL", "BTC", "ETH"]
 
-# Header
 BOT_ICON_SVG = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="15" rx="5" fill="#111620" stroke="#00f076" stroke-width="1.8"/><circle cx="8" cy="12" r="2" fill="#00f076"/><circle cx="16" cy="12" r="2" fill="#00f076"/><path d="M12 2V5" stroke="#00f076" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="1.5" r="1.5" fill="#00f076"/><path d="M9 16C10.5 17 13.5 17 15 16" stroke="#00f076" stroke-width="1.2" stroke-linecap="round"/></svg>"""
 
 st.markdown(f"""
@@ -473,13 +470,12 @@ with c1:
         save_state(es)
         st.rerun()
 
-    slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25, help="Small tranche orders that fit comfortably in a $20 bankroll")
-    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50, help="Guaranteed cash reserve never spent")
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.55, step=0.05, help="Fast scalable profit targets")
+    slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
+    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50)
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.55, step=0.05)
     sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
 
     if st.button("🚨 PANIC LIQUIDATE ALL POSITIONS", use_container_width=True, type="primary"):
-        # Liquidate all open positions back to cash at current live market price
         recovered_cash = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
         es["cash"] += recovered_cash
         es["positions"] = []
@@ -520,19 +516,18 @@ with c2:
         else:
             st.caption("No closed orders recorded yet.")
 
-# THE 6-NODE MICRO SWARM ENGINE (Option C Core Bridge)
+# THE FIXED 6-NODE MICRO SWARM ENGINE (Fixed es['activity_logs'] bug)
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    # Check if we already have an open position in this specific coin
     held_coins = [p["symbol"] for p in es["positions"]]
     has_coin = target_coin in held_coins
     can_buy = (es["cash"] - slice_size >= cash_buffer) and (not has_coin)
 
     if step == 0:
-        st.session_state.activity_logs.insert(0, {
+        es["activity_logs"].insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
             "desc": f"live tick {target_coin}-USD: ${live_p:,.2f} · Cash ${es['cash']:.2f}", "hi": False
@@ -541,7 +536,7 @@ def advance_micro_swarm():
 
     elif step == 1:
         prob = round(random.uniform(0.80, 0.95), 2)
-        st.session_state.activity_logs.insert(0, {
+        es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": f"+${random.uniform(0.10, 0.40):.2f}", "p_cls": "pnl-pos",
             "desc": f"prior odds calculated for {target_coin} · P={prob:.2f}", "hi": False
@@ -549,7 +544,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 2
 
     elif step == 2:
-        st.session_state.activity_logs.insert(0, {
+        es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
             "desc": f"micro-scalp +{tp_target:.2f}% verified > DEX friction", "hi": False
@@ -558,14 +553,14 @@ def advance_micro_swarm():
 
     elif step == 3:
         if can_buy:
-            st.session_state.activity_logs.insert(0, {
+            es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
                 "desc": f"sized ${slice_size:.2f} slice for {target_coin} · leaves ${es['cash']-slice_size:.2f} cash", "hi": False
             })
         else:
             reason = f"already holding {target_coin}" if has_coin else f"Cash ${es['cash']:.2f} near buffer"
-            st.session_state.activity_logs.insert(0, {
+            es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
                 "desc": f"GATE ACTIVE: {reason} · waiting for sell", "hi": False
@@ -574,7 +569,6 @@ def advance_micro_swarm():
 
     elif step == 4:
         if can_buy:
-            # EXECUTE MICRO-TRANCHE BUY AT LIVE TICK PRICE
             qty = slice_size / live_p
             es["cash"] -= slice_size
             order_id = hex(random.randint(100000, 999999))[2:]
@@ -594,7 +588,7 @@ def advance_micro_swarm():
                 "Status": "FILLED",
                 "ID": order_id
             })
-            st.session_state.activity_logs.insert(0, {
+            es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
                 "desc": f"FILLED {target_coin}-USD #${order_id} (${slice_size:.2f}) at ${live_p:,.2f}", "hi": True
@@ -602,7 +596,6 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER MONITORS ALL OPEN POSITIONS AGAINST LIVE TICKS
         remaining_positions = []
         for p in es["positions"]:
             c_price = get_live_price(p["symbol"])
@@ -610,7 +603,6 @@ def advance_micro_swarm():
             pnl_usd = (p["qty"] * c_price) - p["cost"]
 
             if pnl_pct >= tp_target:
-                # TAKE-PROFIT TRIGGERED!
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
                 es["real_wins"] += 1
@@ -623,13 +615,12 @@ def advance_micro_swarm():
                     "Status": "TP FILLED",
                     "ID": p["id"]
                 })
-                st.session_state.activity_logs.insert(0, {
+                es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"TAKE-PROFIT LOCKED on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
+                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
                 })
             elif pnl_pct <= -abs(sl_target):
-                # STOP-LOSS TRIGGERED
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
                 es["order_history"].insert(0, {
@@ -641,10 +632,10 @@ def advance_micro_swarm():
                     "Status": "SL CUT",
                     "ID": p["id"]
                 })
-                st.session_state.activity_logs.insert(0, {
+                es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-neg",
-                    "desc": f"STOP-LOSS CUT on {p['symbol']} at {pnl_pct:+.2f}%", "hi": False
+                    "desc": f"STOP-LOSS on {p['symbol']} at {pnl_pct:+.2f}%", "hi": False
                 })
             else:
                 remaining_positions.append(p)
@@ -656,7 +647,8 @@ def advance_micro_swarm():
 
     save_state(es)
 
-if auto_pilot:
-    time.sleep(2.0)
+# Live auto-pilot loop running every 1.5 seconds
+if es.get("auto_pilot", False):
+    time.sleep(1.5)
     advance_micro_swarm()
     st.rerun()
