@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 DESK_NAME = "SYNAPSE // PRE-FLIGHT JUPITER MATRIX"
 STARTING_CAPITAL = 20.00
+MAX_TRANCHES_PER_COIN = 2  # Allows adding second tranches with your remaining $15.50 cash!
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -214,6 +215,7 @@ st.markdown("""
 .badge-fill     { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-settle   { background: rgba(0,240,118,0.22); color: #00f076; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 .badge-buffer   { background: rgba(255,183,3,0.18); color: #ffb703; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
+.badge-patrol   { background: rgba(0,229,255,0.18); color: #00e5ff; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; text-align: center; }
 
 .pnl-pos  { color: #00f076; font-weight: 800; text-align: right; }
 .pnl-neg  { color: #ff5252; font-weight: 800; text-align: right; }
@@ -319,9 +321,9 @@ AGENTS_METRICS = {
     0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "LIVE TICK SCANNER", "state": "Streaming real-time order-book prices", "stat": "FEED: COINBASE"},
     1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on live price momentum", "stat": "P(WIN): 0.88"},
     2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Validating +0.55% target > 0.05% DEX fee", "stat": "NET EDGE: +0.50%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "MICRO SIZER", "state": "Calculating $1.50 micro slice with $2 buffer", "stat": "SLICE: $1.50"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ROUTING HANDLER", "state": "Simulating instant DEX swap fill (Pre-Jupiter)", "stat": "SWAP: INSTANT"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "SCALP SELLER", "state": "Monitoring live ticks for Take-Profit triggers", "stat": "SELLER: ACTIVE"}
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "TRANCHE SIZER", "state": "Allocating $1.50 micro slice with cash buffer", "stat": "ALLOC: ACTIVE"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "EXECUTION HANDLER", "state": "Executing live tranche fills or holding", "stat": "DISPATCH: ACTIVE"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PATROL RISK GUARD", "state": "Inspecting live positions for Take-Profit triggers", "stat": "GUARD: ACTIVE"}
 }
 
 def calculate_market_regime():
@@ -342,7 +344,7 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">$1.50 MICRO-TRANCHES • LIVE PRICE ENGINE</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">6-STAGE SEQUENTIAL FLOW • ALL STEPS VOCAL</span></div>
     </div>
     <div class="live-pill">● LIVE FEEDS CONNECTED</div>
 </div>
@@ -350,7 +352,6 @@ st.markdown(f"""
 
 st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
-# Calculate live total portfolio equity against live crypto market prices
 total_crypto_value = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
 total_equity = es["cash"] + total_crypto_value
 net_pnl = total_equity - STARTING_CAPITAL
@@ -516,17 +517,18 @@ with c2:
         else:
             st.caption("No closed orders recorded yet.")
 
-# THE FIXED 6-NODE MICRO SWARM ENGINE (Fixed es['activity_logs'] bug)
+# THE FULLY VOCAL 6-NODE PIPELINE
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    held_coins = [p["symbol"] for p in es["positions"]]
-    has_coin = target_coin in held_coins
-    can_buy = (es["cash"] - slice_size >= cash_buffer) and (not has_coin)
+    # Count how many slices we already hold of this target coin
+    coin_slice_count = sum(1 for p in es["positions"] if p["symbol"] == target_coin)
+    can_buy = (es["cash"] - slice_size >= cash_buffer) and (coin_slice_count < MAX_TRANCHES_PER_COIN)
 
     if step == 0:
+        # STEP 1: SPOTTER
         es["activity_logs"].insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
@@ -535,6 +537,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 1
 
     elif step == 1:
+        # STEP 2: PRIOR
         prob = round(random.uniform(0.80, 0.95), 2)
         es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
@@ -544,6 +547,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 2
 
     elif step == 2:
+        # STEP 3: EDGE
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
@@ -552,14 +556,15 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 3
 
     elif step == 3:
+        # STEP 4: KELLY
         if can_buy:
             es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized ${slice_size:.2f} slice for {target_coin} · leaves ${es['cash']-slice_size:.2f} cash", "hi": False
+                "desc": f"sized tranche ${slice_size:.2f} for {target_coin} (Tranche {coin_slice_count+1}/2)", "hi": False
             })
         else:
-            reason = f"already holding {target_coin}" if has_coin else f"Cash ${es['cash']:.2f} near buffer"
+            reason = f"Max tranches for {target_coin}" if coin_slice_count >= MAX_TRANCHES_PER_COIN else f"Cash near buffer"
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
@@ -568,6 +573,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 4
 
     elif step == 4:
+        # STEP 5: TAKER (ALWAYS VOCAL)
         if can_buy:
             qty = slice_size / live_p
             es["cash"] -= slice_size
@@ -591,18 +597,27 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"FILLED {target_coin}-USD #${order_id} (${slice_size:.2f}) at ${live_p:,.2f}", "hi": True
+                "desc": f"FILLED {target_coin}-USD tranche #${order_id} (${slice_size:.2f}) at ${live_p:,.2f}", "hi": True
+            })
+        else:
+            es["activity_logs"].insert(0, {
+                "dot": "#3b82f6", "agent": "TAKER", "badge": "PRICE", "b_cls": "badge-price",
+                "pnl": "—", "p_cls": "pnl-dash",
+                "desc": f"holding {len(es['positions'])} tranches · CLOSER guarding TP/SL exits", "hi": False
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
+        # STEP 6: CLOSER (ALWAYS VOCAL PATROL)
         remaining_positions = []
+        settled_any = False
         for p in es["positions"]:
             c_price = get_live_price(p["symbol"])
             pnl_pct = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
             pnl_usd = (p["qty"] * c_price) - p["cost"]
 
             if pnl_pct >= tp_target:
+                settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
                 es["real_wins"] += 1
@@ -618,9 +633,10 @@ def advance_micro_swarm():
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
+                    "desc": f"TAKE-PROFIT LOCKED on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
                 })
             elif pnl_pct <= -abs(sl_target):
+                settled_any = True
                 es["cash"] += (p["qty"] * c_price)
                 es["settled_trades"] += 1
                 es["order_history"].insert(0, {
@@ -643,11 +659,20 @@ def advance_micro_swarm():
         es["positions"] = remaining_positions
         cur_tot = es["cash"] + sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
         es["balance_history"].append(cur_tot)
+
+        # If nothing hit TP/SL this tick, log live closer patrol status so Step 6 is always visible!
+        if not settled_any:
+            p_summary = " · ".join([f"{p['symbol']}: {((get_live_price(p['symbol'])-p['entry_price'])/p['entry_price']*100):+.2f}%" for p in es["positions"][:2]])
+            es["activity_logs"].insert(0, {
+                "dot": "#ff7043", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
+                "pnl": "—", "p_cls": "pnl-dash",
+                "desc": f"patrol: {p_summary} (Target: +{tp_target:.2f}%) · looping", "hi": False
+            })
+
         st.session_state.active_agent_step = 0
 
     save_state(es)
 
-# Live auto-pilot loop running every 1.5 seconds
 if es.get("auto_pilot", False):
     time.sleep(1.5)
     advance_micro_swarm()
