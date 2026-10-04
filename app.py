@@ -258,7 +258,7 @@ INITIAL_LOGS = [
 
 INITIAL_LEARNINGS = [
     {"rule_id": 1, "lesson": "Beekeeper rule: Pause buying if rolling win rate drops below 50.0%.", "trigger": "WINRATE_FLOOR"},
-    {"rule_id": 2, "lesson": "Oversold dip rule: Only buy when 14-period RSI is <= 40 (avoids buying tops).", "trigger": "RSI_OVERSOLD"}
+    {"rule_id": 2, "lesson": "Oversold dip rule: Only buy when 14-period RSI is <= 45 (avoids buying tops).", "trigger": "RSI_OVERSOLD"}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -279,7 +279,6 @@ def get_live_price(ticker: str) -> float:
             fallbacks = {"BTC": 84920.0, "ETH": 2695.0, "SOL": 120.5}
             return fallbacks.get(ticker, 100.0)
 
-# 14-PERIOD RSI (RELATIVE STRENGTH INDEX) MATHEMATICAL CALCULATOR
 def calculate_rsi(prices):
     if len(prices) < 6:
         return 50.0
@@ -304,6 +303,16 @@ def load_state():
         try:
             with open(HISTORY_FILE, "r") as f:
                 d = json.load(f)
+                if "learnings" not in d:
+                    d["learnings"] = INITIAL_LEARNINGS
+                # Auto-upgrade any legacy positions with default ratchet keys!
+                for p in d.get("positions", []):
+                    if "peak_pnl_pct" not in p:
+                        p["peak_pnl_pct"] = 0.0
+                    if "ratchet_stop_pct" not in p:
+                        p["ratchet_stop_pct"] = -0.35
+                    if "ratchet_tier" not in p:
+                        p["ratchet_tier"] = 0
                 return d
         except Exception:
             pass
@@ -335,6 +344,15 @@ if "price_history" not in es:
     es["price_history"] = {"BTC": [], "ETH": [], "SOL": []}
 if "learnings" not in es:
     es["learnings"] = INITIAL_LEARNINGS
+
+# Ensure all session positions have ratchet keys safely defined
+for p in es.get("positions", []):
+    if "peak_pnl_pct" not in p:
+        p["peak_pnl_pct"] = 0.0
+    if "ratchet_stop_pct" not in p:
+        p["ratchet_stop_pct"] = -0.35
+    if "ratchet_tier" not in p:
+        p["ratchet_tier"] = 0
 
 if "active_agent_step" not in st.session_state:
     st.session_state.active_agent_step = 0
@@ -391,7 +409,6 @@ net_pnl_pct = (net_pnl / STARTING_CAPITAL) * 100
 settled_n = max(1, es["settled_trades"])
 win_rate = (es["real_wins"] / settled_n) * 100 if es["settled_trades"] > 0 else 100.0
 
-# BEEKEEPER STATUS EVALUATION
 beekeeper_alert = (win_rate < 50.0 and settled_n >= 5)
 
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -508,8 +525,7 @@ with c1:
         save_state(es)
         st.rerun()
 
-    # Quantitative RSI Thresholds
-    max_rsi_entry = st.slider("Max RSI Entry Threshold", 30, 55, 45, help="Only buys when RSI is under this number (buying the dip, never buying the top!)")
+    max_rsi_entry = st.slider("Max RSI Entry Threshold", 30, 55, 45, help="Only buys when RSI is under this number (buying dips, never tops!)")
     tier1_trigger = st.slider("Ratchet Tier 1 (+% Trigger)", 0.25, 0.80, 0.35, step=0.05)
     tier2_trigger = st.slider("Ratchet Tier 2 (+% Trigger)", 0.60, 2.00, 0.70, step=0.05)
     initial_sl = st.slider("Initial Stop-Loss (-%)", 0.20, 1.00, 0.35, step=0.05)
@@ -575,7 +591,6 @@ def advance_micro_swarm():
     target_coin = random.choice(WATCHLIST)
     live_p = get_live_price(target_coin)
 
-    # Maintain tick history for RSI calculations
     if target_coin not in es["price_history"]:
         es["price_history"][target_coin] = []
     es["price_history"][target_coin].append(live_p)
@@ -585,7 +600,6 @@ def advance_micro_swarm():
     rsi = calculate_rsi(es["price_history"][target_coin])
     current_regime = calculate_market_regime()
 
-    # BEEKEEPER OVERRIDE CHECK: Is Win Rate below 50%?
     settled_count = es.get("settled_trades", 0)
     win_count = es.get("real_wins", 0)
     cur_win_rate = (win_count / max(1, settled_count)) * 100
@@ -600,7 +614,6 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # STEP 2: PRIOR (Runs the Beekeeper & RSI Gate)
         if is_beekeeper_pause:
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "PRIOR", "badge": "BEEKEEPER", "b_cls": "badge-beekeeper",
@@ -614,7 +627,7 @@ def advance_micro_swarm():
             es["activity_logs"].insert(0, {
                 "dot": "#ff4d6d", "agent": "PRIOR", "badge": "PRICE", "b_cls": "badge-price",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"OVERBOUGHT FILTER: {target_coin} RSI={rsi:.1f} > {max_rsi_entry} · Refusing to buy top", "hi": False
+                "desc": f"OVERBOUGHT: {target_coin} RSI={rsi:.1f} > {max_rsi_entry} · Refusing to buy top", "hi": False
             })
             st.session_state.active_agent_step = 5
             save_state(es)
@@ -624,7 +637,7 @@ def advance_micro_swarm():
         es["activity_logs"].insert(0, {
             "dot": "#00f076", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": f"+${random.uniform(0.10, 0.35):.2f}", "p_cls": "pnl-pos",
-            "desc": f"QUANTUM DIP CONFIRMED: {target_coin} RSI={rsi:.1f} <= {max_rsi_entry} · P={prob:.2f}", "hi": True
+            "desc": f"RSI DIP CONFIRMED: {target_coin} RSI={rsi:.1f} <= {max_rsi_entry} · P={prob:.2f}", "hi": True
         })
         st.session_state.active_agent_step = 2
 
@@ -684,7 +697,7 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # CLOSER: EVALUATES RATCHET & AUTO-ADAPTS RULES ON LOSSES
+        # CLOSER: SAFE GET() CALLS TO PREVENT KEYERROR ON LEGACY POSITIONS
         remaining_positions = []
         settled_any = False
 
@@ -693,10 +706,11 @@ def advance_micro_swarm():
             pnl_pct = ((c_price - p["entry_price"]) / p["entry_price"]) * 100
             pnl_usd = (p["qty"] * c_price) - p["cost"]
             
+            # SAFE .get() to prevent KeyError
             if pnl_pct > p.get("peak_pnl_pct", 0.0):
                 p["peak_pnl_pct"] = pnl_pct
 
-            peak = p["peak_pnl_pct"]
+            peak = p.get("peak_pnl_pct", 0.0)
             current_floor = p.get("ratchet_stop_pct", -initial_sl)
 
             # RATCHET TIER 1: 50% Profit Lock
@@ -721,10 +735,10 @@ def advance_micro_swarm():
                     "desc": f"RATCHET TIER 2 on {p['symbol']}: Locked +{p['ratchet_stop_pct']:.2f}% floor (65% rule)!", "hi": True
                 })
 
-            # THE RUNNER HUG: Contracts trailing stop to 0.20% as price pumps
+            # RUNNER HUG: Contracts trailing stop to 0.20% as price pumps
             if peak >= (tier2_trigger * 1.5):
                 tight_trail = peak - 0.20
-                if tight_trail > p["ratchet_stop_pct"]:
+                if tight_trail > p.get("ratchet_stop_pct", -initial_sl):
                     p["ratchet_stop_pct"] = tight_trail
 
             stop_level = p.get("ratchet_stop_pct", -initial_sl)
@@ -736,7 +750,6 @@ def advance_micro_swarm():
                 if is_win:
                     es["real_wins"] += 1
                 else:
-                    # BEEKEEPER ADAPTATION: Add lesson on loss
                     rule_num = len(es["learnings"]) + 1
                     es["learnings"].insert(0, {
                         "rule_id": rule_num,
