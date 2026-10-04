@@ -7,10 +7,11 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
-DESK_NAME = "SYNAPSE // PRE-FLIGHT JUPITER MATRIX"
+DESK_NAME = "SYNAPSE // FULL-CAPITAL MICRO MATRIX"
 STARTING_CAPITAL = 20.00
-MAX_TRANCHES_PER_COIN = 2  # Allows adding second tranches with your remaining $15.50 cash!
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -249,11 +250,14 @@ st.markdown("""
 
 load_dotenv()
 
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
+gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
+
 HISTORY_FILE = "micro_engine_state.json"
 
 INITIAL_LOGS = [
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "live price streams connected: BTC / ETH / SOL", "hi": True},
-    {"dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size", "pnl": "—", "p_cls": "pnl-dash", "desc": "$1.50 micro-slices armed · $2.00 cash floor buffer", "hi": False}
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "full capital deployment active down to cash buffer", "hi": True},
+    {"dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size", "pnl": "—", "p_cls": "pnl-dash", "desc": "$1.50 micro-slices armed · auto-balancing basket", "hi": False}
 ]
 
 def get_live_price(ticker: str) -> float:
@@ -318,12 +322,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "LIVE TICK SCANNER", "state": "Streaming real-time order-book prices", "stat": "FEED: COINBASE"},
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "FULL CAPITAL SCANNER", "state": "Deploying cash down to buffer across basket", "stat": "BUDGET: $20.00"},
     1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on live price momentum", "stat": "P(WIN): 0.88"},
     2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Validating +0.55% target > 0.05% DEX fee", "stat": "NET EDGE: +0.50%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "TRANCHE SIZER", "state": "Allocating $1.50 micro slice with cash buffer", "stat": "ALLOC: ACTIVE"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "EXECUTION HANDLER", "state": "Executing live tranche fills or holding", "stat": "DISPATCH: ACTIVE"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "PATROL RISK GUARD", "state": "Inspecting live positions for Take-Profit triggers", "stat": "GUARD: ACTIVE"}
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "FULL SWARM SIZER", "state": "Sizing $1.50 slices until cash reaches buffer", "stat": "ALLOC: CONTINUOUS"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "EXECUTION HANDLER", "state": "Filling multi-tranche slices on live ticks", "stat": "SWAP: INSTANT"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "HIGH-FREQUENCY SELLER", "state": "Micro-scalping +0.55% TP targets to recycle cash", "stat": "SELLER: ACTIVE"}
 }
 
 def calculate_market_regime():
@@ -344,14 +348,15 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">6-STAGE SEQUENTIAL FLOW • ALL STEPS VOCAL</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">CONTINUOUS ALLOCATION • DYNAMIC ZOOM</span></div>
     </div>
-    <div class="live-pill">● LIVE FEEDS CONNECTED</div>
+    <div class="live-pill">● FULL SWARM DEPLOYED</div>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown(f"""<div class="regime-container"><div><span style="color:#8b949e; font-size:10px; font-weight:700;">REGIME RADAR:</span> &nbsp;<span class="regime-pill {regime['color']}">STATE: {regime['state']}</span></div><div style="font-size: 11px;"><span style="color:#00f076;">TREND: <b>{regime['trend']}%</b></span> &nbsp;•&nbsp;<span style="color:#ffb703;">CHOP: <b>{regime['chop']}%</b></span> &nbsp;•&nbsp;<span style="color:#ff4d6d;">PANIC: <b>{regime['panic']}%</b></span></div><div style="font-size: 10px; color: #8b949e;">GATE: <b>{'AUTHORIZED' if regime['state'] != 'CHOP' else 'HOLD CASH'}</b></div></div>""", unsafe_allow_html=True)
 
+# High-Precision Live Equity Calculation
 total_crypto_value = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
 total_equity = es["cash"] + total_crypto_value
 net_pnl = total_equity - STARTING_CAPITAL
@@ -362,10 +367,10 @@ win_rate = (es["real_wins"] / settled_n) * 100 if es["settled_trades"] > 0 else 
 
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Micro Equity</div><div class="stat-number c-white">${total_equity:,.2f}</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Live Equity</div><div class="stat-number c-white">${total_equity:,.3f}</div></div>""", unsafe_allow_html=True)
 with m2:
     pnl_c = "c-green" if net_pnl >= 0 else "color: #ff4d6d;"
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Net PnL (from $20)</div><div class="stat-number {pnl_c}">{net_pnl:+,.2f} <span style="font-size:10px;">({net_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Net PnL (from $20)</div><div class="stat-number {pnl_c}">{net_pnl:+,.3f} <span style="font-size:10px;">({net_pnl_pct:+.2f}%)</span></div></div>""", unsafe_allow_html=True)
 with m3:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Available Cash</div><div class="stat-number c-cyan">${es['cash']:,.2f}</div></div>""", unsafe_allow_html=True)
 with m4:
@@ -405,17 +410,18 @@ st.markdown("".join(grid_pieces), unsafe_allow_html=True)
 col_left, col_right = st.columns([1.3, 1.2])
 
 with col_left:
-    st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${total_equity:,.2f}</span>", unsafe_allow_html=True)
-    history = es["balance_history"]
+    st.markdown(f"**LIVE EQUITY CURVE** &nbsp;&nbsp; <span style='color:#00f076; font-size:15px; font-weight:800;'>${total_equity:,.3f}</span>", unsafe_allow_html=True)
+    history = es["balance_history"][-35:]
     min_val, max_val = min(history), max(history)
-    diff = max(max_val - min_val, 0.40)
-    b_bound, t_bound = min_val - (diff * 0.25), max_val + (diff * 0.25)
+    # ULTRA-MICRO 3-CENT ZOOM: So every fraction of a cent actively animates the chart!
+    diff = max(max_val - min_val, 0.03)
+    b_bound, t_bound = min_val - (diff * 0.15), max_val + (diff * 0.15)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=[b_bound] * len(history), mode='lines', line=dict(width=0), showlegend=False, hoverinfo='none'))
     fig.add_trace(go.Scatter(
-        y=history, mode='lines+markers', line=dict(color='#00f076', width=2.4),
-        fill='tonexty', fillcolor='rgba(0, 240, 118, 0.12)',
+        y=history, mode='lines+markers', line=dict(color='#00f076', width=2.5),
+        fill='tonexty', fillcolor='rgba(0, 240, 118, 0.15)',
         marker=dict(size=4, color='#00f076', line=dict(width=1, color='#ffffff')),
         hoverinfo='y', showlegend=False
     ))
@@ -423,7 +429,7 @@ with col_left:
         template="plotly_dark", paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
         margin=dict(l=0, r=0, t=10, b=0), height=210,
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=True, gridcolor="#161b22", zeroline=False, side="right", tickprefix="$", tickformat=",.2f", range=[b_bound, t_bound], autorange=False)
+        yaxis=dict(showgrid=True, gridcolor="#161b22", zeroline=False, side="right", tickprefix="$", tickformat=",.3f", range=[b_bound, t_bound], autorange=False)
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
@@ -464,7 +470,7 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ $20 Micro Controls")
+    st.subheader("⚙️ Capital & Risk Controls")
     auto_pilot = st.toggle("⚡ ACTIVATE MICRO SWARM", value=es.get("auto_pilot", False))
     if auto_pilot != es.get("auto_pilot", False):
         es["auto_pilot"] = auto_pilot
@@ -472,9 +478,9 @@ with c1:
         st.rerun()
 
     slice_size = st.slider("Micro-Slice Size ($USD)", 1.00, 3.00, 1.50, step=0.25)
-    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50)
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.20, 1.50, 0.55, step=0.05)
-    sl_target = st.slider("Closer Stop-Loss (-%)", 0.20, 1.50, 0.40, step=0.05)
+    cash_buffer = st.slider("Cash Floor Buffer ($USD)", 1.00, 5.00, 2.00, step=0.50, help="Guaranteed cash reserve never spent")
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.15, 1.50, 0.40, step=0.05, help="Fast scalable profit targets")
+    sl_target = st.slider("Closer Stop-Loss (-%)", 0.15, 1.50, 0.35, step=0.05)
 
     if st.button("🚨 PANIC LIQUIDATE ALL POSITIONS", use_container_width=True, type="primary"):
         recovered_cash = sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
@@ -517,27 +523,27 @@ with c2:
         else:
             st.caption("No closed orders recorded yet.")
 
-# THE FULLY VOCAL 6-NODE PIPELINE
+# ADVANCE SWARM: Automatically deploys all cash down to the $2.00 buffer!
 def advance_micro_swarm():
     step = st.session_state.active_agent_step
-    target_coin = random.choice(WATCHLIST)
+    
+    # Pick the coin with the LEAST active slices to balance the basket evenly!
+    coin_counts = {coin: sum(1 for p in es["positions"] if p["symbol"] == coin) for coin in WATCHLIST}
+    target_coin = min(coin_counts, key=coin_counts.get)
     live_p = get_live_price(target_coin)
 
-    # Count how many slices we already hold of this target coin
-    coin_slice_count = sum(1 for p in es["positions"] if p["symbol"] == target_coin)
-    can_buy = (es["cash"] - slice_size >= cash_buffer) and (coin_slice_count < MAX_TRANCHES_PER_COIN)
+    # CAN BUY AS LONG AS REMAINING CASH >= BUFFER! No artificial caps.
+    can_buy = (es["cash"] - slice_size >= cash_buffer)
 
     if step == 0:
-        # STEP 1: SPOTTER
         es["activity_logs"].insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"live tick {target_coin}-USD: ${live_p:,.2f} · Cash ${es['cash']:.2f}", "hi": False
+            "desc": f"live tick {target_coin}-USD: ${live_p:,.2f} · Cash ${es['cash']:.2f} (Buffer: ${cash_buffer:.2f})", "hi": False
         })
         st.session_state.active_agent_step = 1
 
     elif step == 1:
-        # STEP 2: PRIOR
         prob = round(random.uniform(0.80, 0.95), 2)
         es["activity_logs"].insert(0, {
             "dot": "#f59e0b", "agent": "PRIOR", "badge": "SCAN", "b_cls": "badge-scan",
@@ -547,7 +553,6 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 2
 
     elif step == 2:
-        # STEP 3: EDGE
         es["activity_logs"].insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
@@ -556,24 +561,21 @@ def advance_micro_swarm():
         st.session_state.active_agent_step = 3
 
     elif step == 3:
-        # STEP 4: KELLY
         if can_buy:
             es["activity_logs"].insert(0, {
                 "dot": "#a855f7", "agent": "KELLY", "badge": "SIZE", "b_cls": "badge-size",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"sized tranche ${slice_size:.2f} for {target_coin} (Tranche {coin_slice_count+1}/2)", "hi": False
+                "desc": f"sized tranche ${slice_size:.2f} for {target_coin} · deploying cash down to buffer", "hi": False
             })
         else:
-            reason = f"Max tranches for {target_coin}" if coin_slice_count >= MAX_TRANCHES_PER_COIN else f"Cash near buffer"
             es["activity_logs"].insert(0, {
                 "dot": "#ffb703", "agent": "KELLY", "badge": "BUFFER", "b_cls": "badge-buffer",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"GATE ACTIVE: {reason} · waiting for sell", "hi": False
+                "desc": f"CASH FLOOR REACHED: Cash ${es['cash']:.2f} <= Buffer ${cash_buffer:.2f} · waiting for sell", "hi": False
             })
         st.session_state.active_agent_step = 4
 
     elif step == 4:
-        # STEP 5: TAKER (ALWAYS VOCAL)
         if can_buy:
             qty = slice_size / live_p
             es["cash"] -= slice_size
@@ -601,14 +603,13 @@ def advance_micro_swarm():
             })
         else:
             es["activity_logs"].insert(0, {
-                "dot": "#3b82f6", "agent": "TAKER", "badge": "PRICE", "b_cls": "badge-price",
+                "dot": "#3b82f6", "agent": "TAKER", "badge": "HOLD", "b_cls": "badge-price",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"holding {len(es['positions'])} tranches · CLOSER guarding TP/SL exits", "hi": False
+                "desc": f"cash at floor reserve (${es['cash']:.2f}) · CLOSER guarding exits", "hi": False
             })
         st.session_state.active_agent_step = 5
 
     elif step == 5:
-        # STEP 6: CLOSER (ALWAYS VOCAL PATROL)
         remaining_positions = []
         settled_any = False
         for p in es["positions"]:
@@ -633,7 +634,7 @@ def advance_micro_swarm():
                 es["activity_logs"].insert(0, {
                     "dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle",
                     "pnl": f"{pnl_usd:+.3f}", "p_cls": "pnl-pos",
-                    "desc": f"TAKE-PROFIT LOCKED on {p['symbol']} at {pnl_pct:+.2f}% · returned to cash!", "hi": True
+                    "desc": f"TAKE-PROFIT on {p['symbol']} at {pnl_pct:+.2f}% (+$ {pnl_usd:.3f}) · cash recycled!", "hi": True
                 })
             elif pnl_pct <= -abs(sl_target):
                 settled_any = True
@@ -660,13 +661,12 @@ def advance_micro_swarm():
         cur_tot = es["cash"] + sum([p["qty"] * get_live_price(p["symbol"]) for p in es["positions"]])
         es["balance_history"].append(cur_tot)
 
-        # If nothing hit TP/SL this tick, log live closer patrol status so Step 6 is always visible!
         if not settled_any:
             p_summary = " · ".join([f"{p['symbol']}: {((get_live_price(p['symbol'])-p['entry_price'])/p['entry_price']*100):+.2f}%" for p in es["positions"][:2]])
             es["activity_logs"].insert(0, {
                 "dot": "#ff7043", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
                 "pnl": "—", "p_cls": "pnl-dash",
-                "desc": f"patrol: {p_summary} (Target: +{tp_target:.2f}%) · looping", "hi": False
+                "desc": f"patrol: {p_summary} (TP target: +{tp_target:.2f}%)", "hi": False
             })
 
         st.session_state.active_agent_step = 0
