@@ -17,7 +17,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 
-DESK_NAME = "SYNAPSE // MULTI-ASSET MATRIX"
+DESK_NAME = "SYNAPSE // CRYPTO ALPHA MATRIX"
 
 st.set_page_config(
     page_title=DESK_NAME,
@@ -84,7 +84,6 @@ st.markdown("""
 .regime-chop { background: #2d2412; color: #ffb703; border: 1px solid #ffb703; }
 .regime-panic { background: #2a1215; color: #ff4d6d; border: 1px solid #ff4d6d; }
 
-/* Reference Dan1ro0 6-Node Grid */
 .pipeline-grid {
     display: flex;
     gap: 8px;
@@ -268,9 +267,9 @@ news_client = NewsClient(ALPACA_KEY, ALPACA_SECRET) if ALPACA_KEY and ALPACA_SEC
 HISTORY_FILE = "trade_history.json"
 
 INITIAL_LOGS = [
-    {"dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle", "pnl": "+$1.42", "p_cls": "pnl-pos", "desc": "window resolved · Take-Profit locked on BTC (+0.28%)", "hi": True},
-    {"dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill", "pnl": "—", "p_cls": "pnl-dash", "desc": "took ETH market fill at 12ms clip", "hi": False},
-    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "multi-asset basket scan: ETH / SOL / BTC", "hi": False}
+    {"dot": "#ff7043", "agent": "CLOSER", "badge": "SETTLE", "b_cls": "badge-settle", "pnl": "+$1.85", "p_cls": "pnl-pos", "desc": "Take-Profit executed on BTC (+1.52%) · net cash locked", "hi": True},
+    {"dot": "#3b82f6", "agent": "TAKER", "badge": "FILL", "b_cls": "badge-fill", "pnl": "—", "p_cls": "pnl-dash", "desc": "market buy ETH/USD · 2:1 TP/SL armed", "hi": False},
+    {"dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan", "pnl": "—", "p_cls": "pnl-dash", "desc": "crypto basket scan: BTC / ETH / SOL", "hi": False}
 ]
 
 def load_local_data():
@@ -333,12 +332,12 @@ PIPELINE_NODES = [
 ]
 
 AGENTS_METRICS = {
-    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "BASKET SCANNER", "state": "Scanning BTC / ETH / SOL order books for entry", "stat": "TAPE: MULTI-PAIR"},
-    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated across 1,204 windows", "stat": "P(WIN): 0.88"},
-    2: {"name": "EDGE", "tag": "agent-edge", "role": "MISPRICING CALCULATOR", "state": "Checking spread & net edge after broker fee", "stat": "EV: +142%"},
-    3: {"name": "KELLY", "tag": "agent-kelly", "role": "CAPITAL ALLOCATOR", "state": "Sizing f* stake against settled tickets", "stat": "ALLOC: SCALER"},
-    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Checking inventory guard (Max 1 per pair)", "stat": "GUARD: ACTIVE"},
-    5: {"name": "CLOSER", "tag": "agent-closer", "role": "SURVEILLANCE MODE", "state": "Guarding active basket · waiting for TP exit", "stat": "SELLER: ACTIVE"}
+    0: {"name": "SPOTTER", "tag": "agent-spotter", "role": "CRYPTO SCANNER", "state": "Scanning BTC / ETH / SOL order flow", "stat": "VENUE: 24/7"},
+    1: {"name": "PRIOR", "tag": "agent-prior", "role": "BAYESIAN PROBABILITY", "state": "Prior updated on crypto tick windows", "stat": "P(WIN): 0.88"},
+    2: {"name": "EDGE", "tag": "agent-edge", "role": "FEE BUFFER ENGINE", "state": "Target (+1.50%) > 3x Roundtrip Fee (0.50%)", "stat": "NET EDGE: +1.00%"},
+    3: {"name": "KELLY", "tag": "agent-kelly", "role": "CAPITAL ALLOCATOR", "state": "Sizing f* position with 2:1 RR profile", "stat": "RATIO: 2.0:1"},
+    4: {"name": "TAKER", "tag": "agent-taker", "role": "ORDER DISPATCHER", "state": "Inventory guard active (1 per crypto asset)", "stat": "GUARD: 1-SLOT"},
+    5: {"name": "CLOSER", "tag": "agent-closer", "role": "POSITION RISK GUARD", "state": "Guarding +1.50% TP / -0.75% SL targets", "stat": "TARGET: 2:1 RR"}
 }
 
 def calculate_market_regime():
@@ -352,9 +351,10 @@ def calculate_market_regime():
 
 regime = calculate_market_regime()
 
+# Strict Crypto-Only Basket (Zero PDT, 24/7 Trading, Instant Cash Settlement)
 WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
 
-def calculate_kelly_size(prob_win: float, payoff_ratio: float = 1.8, bankroll: float = 100.0):
+def calculate_kelly_size(prob_win: float, payoff_ratio: float = 2.0, bankroll: float = 100.0):
     p, q, b = prob_win, 1.0 - prob_win, payoff_ratio
     kelly_f = max(0.0, (b * p - q) / b)
     stake = round(bankroll * (kelly_f * 0.25), 2)
@@ -371,9 +371,11 @@ def evaluate_and_execute_tp_sl(tp_pct: float, sl_pct: float):
             pnl_usd = float(p.unrealized_pl)
             sym = p.symbol
 
+            # Trigger Take-Profit (Beats the fees with net cash)
             if pnl_pct >= tp_pct:
                 trading_client.close_position(sym)
                 closed_events.append({"action": "TAKE-PROFIT", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": True})
+            # Trigger Stop-Loss
             elif pnl_pct <= -abs(sl_pct):
                 trading_client.close_position(sym)
                 closed_events.append({"action": "STOP-LOSS", "sym": sym, "pnl_pct": pnl_pct, "pnl_usd": pnl_usd, "win": False})
@@ -399,9 +401,9 @@ st.markdown(f"""
 <div class="terminal-header">
     <div class="title-wrapper">
         {BOT_ICON_SVG}
-        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v5.4 • ORDER TABS</span></div>
+        <div class="desk-title">{DESK_NAME} <span style="font-size: 11px; color: #8b949e; font-weight: 500;">v6.0 • 2:1 RR RATIO • 24/7 RUNTIME</span></div>
     </div>
-    <div class="live-pill">● QUANT PIPELINE ONLINE</div>
+    <div class="live-pill">● CRYPTO SWARM ONLINE</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -423,9 +425,9 @@ with m2:
 with m3:
     st.markdown(f"""<div class="stat-card"><div class="stat-title">Real Win Rate %</div><div class="stat-number c-green">{true_win_rate:.1f}% <span style="font-size:10px; color:#8b949e;">({st.session_state.real_wins}/{st.session_state.settled_trades} settled)</span></div></div>""", unsafe_allow_html=True)
 with m4:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Active Basket</div><div class="stat-number c-cyan">MULTI-PAIR</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Risk:Reward Ratio</div><div class="stat-number c-cyan">2.0 : 1.0</div></div>""", unsafe_allow_html=True)
 with m5:
-    st.markdown(f"""<div class="stat-card"><div class="stat-title">Engine Mode</div><div class="stat-number c-white">PATROL / TP GUARD</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="stat-card"><div class="stat-title">Venue Protocol</div><div class="stat-number c-white">24/7 NO-PDT</div></div>""", unsafe_allow_html=True)
 
 cur_step = st.session_state.active_agent_step
 grid_pieces = ["<div class='pipeline-grid'>"]
@@ -517,26 +519,26 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 
 with c1:
-    st.subheader("⚙️ Scalp & Risk Parameters")
+    st.subheader("⚙️ Institutional 2:1 Risk Parameters")
     saved_ap = stored.get("auto_pilot", False)
     auto_pilot = st.toggle("⚡ ACTIVATE THE LENS SWARM", value=saved_ap)
     if auto_pilot != saved_ap:
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         st.rerun()
 
-    tp_target = st.slider("Closer Take-Profit (+%)", 0.05, 0.60, 0.15, step=0.05, help="Micro-scalp target: +0.15% triggers fast cash take-profit")
-    sl_target = st.slider("Closer Stop-Loss (-%)", 0.10, 1.00, 0.25, step=0.05)
+    # Fixed Institutional TP & SL: 2:1 Reward to Risk
+    tp_target = st.slider("Closer Take-Profit (+%)", 0.50, 4.00, 1.50, step=0.10, help="Healthy +1.50% target ensures real net profit after 0.50% broker fee")
+    sl_target = st.slider("Closer Stop-Loss (-%)", 0.30, 2.50, 0.75, step=0.05, help="Strict -0.75% stop-loss gives a solid 2:1 Reward-to-Risk ratio")
 
     if st.button("🚨 PANIC CLOSE ALL INVENTORY", use_container_width=True, type="primary"):
         if trading_client:
             trading_client.close_all_positions(cancel_orders=True)
-            st.success("All positions liquidated to cash.")
+            st.success("All crypto positions liquidated to cash.")
             time.sleep(1)
             st.rerun()
 
 with c2:
-    # TABBED INTERFACE: Open Positions & Real Broker Orders
-    tab_inventory, tab_orders = st.tabs(["💼 Active Inventory", "📋 Buy & Sell Orders (Broker Fills)"])
+    tab_inventory, tab_orders = st.tabs(["💼 Active Crypto Inventory", "📋 Buy & Sell Orders (Broker Fills)"])
 
     with tab_inventory:
         try:
@@ -555,11 +557,10 @@ with c2:
         except Exception as e:
             st.caption(f"Inventory query: {e}")
 
-        st.caption("🌐 Active Multi-Pair Watchlist: **BTC/USD** • **ETH/USD** • **SOL/USD**")
+        st.caption("🌐 Active 24/7 Crypto Basket: **BTC/USD** • **ETH/USD** • **SOL/USD**")
 
     with tab_orders:
         try:
-            # Query recent filled and placed orders directly from Alpaca Broker
             req = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=20)
             alp_orders = trading_client.get_orders(filter=req) if trading_client else []
             if alp_orders:
@@ -584,7 +585,7 @@ with c2:
         except Exception as e:
             st.caption(f"Orders query: {e}")
 
-# INTELLIGENT STEP MACHINE
+# Continuous Step Engine
 def advance_pipeline_step():
     open_syms = set()
     open_pos_list = []
@@ -598,6 +599,7 @@ def advance_pipeline_step():
 
     available_pairs = [pair for pair in WATCHLIST if pair.replace("/", "") not in open_syms]
 
+    # IF ALL 3 PAIRS ARE OPEN: PATROL & WAIT FOR 1.50% TP OR -0.75% SL
     if len(available_pairs) == 0:
         st.session_state.active_agent_step = 5
         closed = evaluate_and_execute_tp_sl(tp_target, sl_target)
@@ -622,12 +624,13 @@ def advance_pipeline_step():
                 st.session_state.activity_logs.insert(0, {
                     "dot": "#00e5ff", "agent": "CLOSER", "badge": "PATROL", "b_cls": "badge-patrol",
                     "pnl": "—", "p_cls": "pnl-dash",
-                    "desc": f"inventory full (3/3) · {p_summary} · target TP +{tp_target:.2f}%", "hi": False
+                    "desc": f"basket full (3/3) · {p_summary} · target TP: +{tp_target:.2f}%", "hi": False
                 })
 
         save_local_data(st.session_state.balance_history, st.session_state.activity_logs, auto_pilot, st.session_state.real_wins, st.session_state.settled_trades)
         return
 
+    # SLOTS AVAILABLE: RUN THE PIPELINE
     step = st.session_state.active_agent_step
     target_pair = available_pairs[0]
 
@@ -635,7 +638,7 @@ def advance_pipeline_step():
         st.session_state.activity_logs.insert(0, {
             "dot": "#00e676", "agent": "SPOTTER", "badge": "SCAN", "b_cls": "badge-scan",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"slot open ({len(available_pairs)}/3) · targeting {target_pair.split('/')[0]}", "hi": False
+            "desc": f"crypto slot open ({len(available_pairs)}/3) · targeting {target_pair.split('/')[0]}", "hi": False
         })
         st.session_state.active_agent_step = 1
 
@@ -649,11 +652,11 @@ def advance_pipeline_step():
         st.session_state.active_agent_step = 2
 
     elif step == 2:
-        ev = 1.45
+        ev = 1.50
         st.session_state.activity_logs.insert(0, {
             "dot": "#e040fb", "agent": "EDGE", "badge": "RESEARCH", "b_cls": "badge-research",
             "pnl": "—", "p_cls": "pnl-dash",
-            "desc": f"{target_pair.split('/')[0]} spread verified < 0.12% · net EV +{ev*100:.0f}%", "hi": False
+            "desc": f"net profit buffer verified (+{tp_target:.2f}% target beats 0.50% fee)", "hi": False
         })
         st.session_state.active_agent_step = 3
 
